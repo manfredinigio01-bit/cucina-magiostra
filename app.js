@@ -2,7 +2,7 @@
    Dati: repository GitHub PRIVATO (ricettario.json), copia locale CIFRATA con la password (AES-GCM 256, chiave PBKDF2-SHA256).
    Nessuna dipendenza esterna a runtime: lib/ contiene fflate (zip) ed ExcelJS (xlsx), caricate da questo stesso sito. */
 'use strict';
-const APP_VERSION='1.3.0';
+const APP_VERSION='1.3.1';
 const DEF_REPO='manfredinigio01-bit/magiostra-cucina-dati';
 const ETI_REPO='manfredinigio01-bit/etichette-magiostra-dati';
 const DATA_FILE='ricettario.json';
@@ -378,7 +378,7 @@ function vRicette(){
   if(f==='quasi') R=R.filter(r=>['Tempi mancanti','Prezzi mancanti','Dosi mancanti','Lotto mancante'].includes(C.get(r.id).stato));
   else if(f&&f.startsWith('cat:')) R=R.filter(r=>r.categoria===f.slice(4));
   else if(f) R=R.filter(r=>C.get(r.id).stato===f);
-  const sel=SEL&&getR(SEL);
+  const sel=EDIT&&EDIT.id===SEL?EDIT:SEL&&getR(SEL); // una ricetta nuova o duplicata non è ancora nell'archivio
   const fl=[['','Tutte'],['OK','Food cost OK'],['quasi','Manca un dato'],['Ricetta da inserire','Da inserire'],...CATS().map(c=>['cat:'+c,c])];
   return `<div class="split"><div>
     <div class="row" style="margin-bottom:8px"><input class="i flex1" id="q" placeholder="Cerca ricetta o ingrediente" value="${esc(Q)}"><button class="b p" data-act="nuovaric">+ Nuova</button></div>
@@ -1011,6 +1011,7 @@ function stampa(tipo){
 }
 
 /* ===================== AZIONI ===================== */
+function scrollEdit(){ const e=document.querySelector('[data-e=nome]'); if(e){ e.scrollIntoView({behavior:'smooth',block:'center'}); e.focus({preventScroll:true}); } }
 function newRecipe(){ return {id:uid('r-'),nome:'',foglio:'',categoria:'',unita:'',allergeni:'',note:'',righe:[{ing:null,ric:null,nome:'',dose:null,doseTesto:'',flag:''}],procedimento:'',vendita:'kg',lotto:1,tProd:null,tCott:null,perdita:null,ricarico:null,confezione:null,packaging:'',pezziPack:null,prezzoBanco:null,unitaBanco:'',etichetta:'',inProdotti:true,updatedAt:0,deleted:false,_new:true}; }
 function readEdit(){
   const r=EDIT; if(!r) return;
@@ -1058,13 +1059,13 @@ document.addEventListener('click',async e=>{
     case 'pwsave': return pwSave();
     case 'aggiorna': if('serviceWorker' in navigator){ const rg=await navigator.serviceWorker.getRegistration(); if(rg) await rg.update(); } location.reload(); return;
     case 'dlgclose': return closeDlg();
-    case 'nuovaric': EDIT=newRecipe(); SEL=EDIT.id; TAB='ricette'; return render();
+    case 'nuovaric': EDIT=newRecipe(); SEL=EDIT.id; TAB='ricette'; render(); return scrollEdit();
     case 'modric': EDIT=JSON.parse(JSON.stringify(getR(SEL))); return render();
     case 'annullaric': EDIT=null; if(!getR(SEL)) SEL=null; return render();
     case 'salvaric': return saveRecipe();
     case 'addriga': readEdit(); EDIT.righe.push({ing:null,ric:null,nome:'',dose:null,doseTesto:'',flag:''}); render(); { const ins=document.querySelectorAll('[data-f="nome"]'); ins[ins.length-1]?.focus(); } return;
     case 'delriga': readEdit(); EDIT.righe.splice(+arg,1); return render();
-    case 'duplica': { const r=JSON.parse(JSON.stringify(getR(SEL))); r.id=uid('r-'); r.nome=r.nome+' (copia)'; r.foglio=''; r.etichetta=''; r._new=true; EDIT=r; SEL=r.id; return render(); }
+    case 'duplica': { const r=JSON.parse(JSON.stringify(getR(SEL))); r.id=uid('r-'); r.nome=r.nome+' (copia)'; r.foglio=''; r.etichetta=''; r._new=true; EDIT=r; SEL=r.id; render(); return scrollEdit(); }
     case 'eliminaric': { const r=getR(SEL); const ub=usedAsBase(r.id); if(!confirm((ub.length?'Attenzione: è usata come base in '+ub.map(x=>x.nome).join(', ')+' (perderanno questo costo).\n\n':'')+'Eliminare "'+r.nome+'"? Resta nello storico dell\'archivio online.')) return; r.deleted=true; touch(r); SEL=null; commit(); return render(); }
     case 'stampa': return stampa(arg);
     case 'simreset': MOLT={d:null,kg:null,tp:null,tc:null}; return render();
