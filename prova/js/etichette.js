@@ -1,15 +1,32 @@
 'use strict';
 /* ===================== ETICHETTE (archivio separato) ===================== */
+/* testo ingredienti per l'etichetta: ordine per peso, semilavorati e ingredienti composti con i loro ingredienti tra parentesi, surgelati con * */
+const COMPOSTI_PROB=/margarin|maiones|salsa|dado|brodo|panna|bevanda|latte di|sfoglia|frolla|cioccolat|seitan|tempeh|tofu|senape|ketchup|pesto|preparat|burro di|formaggi|wurstel|biscott|pane |pangrattat|pasta |gnocchi|curry|aceto balsamico|tamari|salsa di soia|miso|lievito in scaglie|gomasio/i;
+function etiRighe(r,stack){
+  stack=stack||new Set([r.id]);
+  const peso=x=>{ const i=x.ing?getI(x.ing):null; return (x.dose||0)*(i&&i.unita==='pz'?(i.pesoPezzo||0):1); };
+  const out=[], warn=new Set();
+  r.righe.filter(x=>x.nome).slice().sort((a,b)=>peso(b)-peso(a)).forEach(x=>{
+    if(x.ric){ const b=getR(x.ric); if(!b||stack.has(b.id)){ out.push(x.nome.toLowerCase()); return; }
+      const st=new Set(stack); st.add(b.id); const sub=etiRighe(b,st); sub.warn.forEach(w=>warn.add(w));
+      out.push(b.nome.replace(/\s*\([^)]*\)/g,'').trim().toLowerCase()+(sub.parti.length?' ('+sub.parti.join(', ')+')':'')); return; }
+    const i=x.ing?getI(x.ing):null;
+    const nome=((i&&i.nomeEtichetta)||x.nome).toLowerCase();
+    if(i&&!i.composizione&&COMPOSTI_PROB.test(nome+' ')) warn.add(i.nome);
+    out.push(nome+(i&&i.surgelato?'*':'')+(i&&i.composizione?' ('+i.composizione+')':''));
+  });
+  return {parti:out,warn:[...warn]};
+}
+function etiTesto(r){ const e=etiRighe(r); let t=e.parti.join(', '); t=t?t.charAt(0).toUpperCase()+t.slice(1)+'.':''; return {txt:t,warn:e.warn,surg:/\*/.test(t)}; }
 async function etiWrite(r){
-  const c=calc(r);
-  const ord=c.righe.filter(z=>z.x.nome).sort((a,b)=>((b.x.dose||0)*((b.i&&b.i.unita==='pz')?(b.i.pesoPezzo||0):1))-((a.x.dose||0)*((a.i&&a.i.unita==='pz')?(a.i.pesoPezzo||0):1))).map(z=>z.x.nome.toLowerCase());
-  let txt=ord.join(', '); txt=txt?txt.charAt(0).toUpperCase()+txt.slice(1)+'.':'';
+  const E=etiTesto(r), txt=E.txt;
   const ex=r.etichetta?ETI.prodotti.find(p=>p.id===r.etichetta):null;
   if(!ex&&!txt) return alert('Questa ricetta non ha ancora ingredienti: inseriscili prima di creare l\'etichetta.');
-  dialog(ex?'Aggiorna etichetta':'Nuova etichetta',`<p class="small">Testo ingredienti in ordine di peso decrescente, preso dalla ricetta. <b>Completalo</b> con i sotto-ingredienti dei prodotti composti (es. "salsa di soia (acqua, soia, sale)"): in etichetta sono obbligatori. Gli allergeni li evidenzia l'app etichette.</p>
+  dialog(ex?'Aggiorna etichetta':'Nuova etichetta',`<p class="small">Testo ingredienti in ordine di peso decrescente, preso dalla ricetta. I semilavorati (ricette base) e gli ingredienti composti (quelli con la lista ingredienti, es. margarina) sono già scritti con i loro ingredienti tra parentesi. I surgelati hanno l'asterisco: la nota "*Ingrediente surgelato." la aggiunge l'app etichette. Gli allergeni li evidenzia l'app etichette.</p>
+   ${E.warn.length?`<div class="warn small">Forse composti ma senza lista ingredienti: <b>${E.warn.map(esc).join(', ')}</b>. Aggiungila in "Ingredienti e prezzi" (apri l'ingrediente, campo "Ingredienti di questo prodotto"), poi rigenera il testo.</div>`:''}
    <label class="f">Nome in etichetta<input class="i" id="e_nome" value="${esc(ex?ex.nome:r.nome)}"></label>
    <label class="f">Ingredienti<textarea class="i" id="e_ing">${esc(ex?ex.ingredienti:txt)}</textarea></label>
-   ${ex?`<p class="small mut">Testo attuale in etichetta: ${esc(ex.ingredienti)}</p><button class="b sm" data-act="etiord">Sostituisci con l'ordine per peso della ricetta</button>`:''}
+   ${ex?`<p class="small mut">Testo attuale in etichetta: ${esc(ex.ingredienti)}</p><button class="b sm" data-act="etiord">Sostituisci con il testo generato dalla ricetta</button>`:''}
    <p class="small mut">Viene scritto nell'archivio dell'app etichette: tutti i PC lo vedono entro 20 secondi.</p>`,[['Annulla','dlgclose'],[ex?'Salva nell\'etichetta':'Crea etichetta','etisave','p']]);
   etiWrite.txt=txt;
 }

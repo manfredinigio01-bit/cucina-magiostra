@@ -6,15 +6,17 @@ function vIngredienti(){
   if(Q) I=I.filter(i=>norm(i.nome+' '+i.fornitore).includes(norm(Q)));
   if(f==='vecchi') I=I.filter(i=>{ const m=monthsSince(lastPriceDate(i)); return unitCost(i)==null||m==null||m>=6; });
   else if(f==='senza') I=I.filter(i=>unitCost(i)==null);
+  else if(f==='surg') I=I.filter(i=>i.surgelato);
+  else if(f==='comp') I=I.filter(i=>i.composizione);
   else if(f.startsWith('forn:')) I=I.filter(i=>i.fornitore===f.slice(5));
   const forn=[...new Set(ings().map(i=>i.fornitore).filter(Boolean))].sort();
   const use=new Map(); ricette().forEach(r=>r.righe.forEach(x=>{ if(x.ing) use.set(x.ing,(use.get(x.ing)||0)+1); }));
   return `<div class="card">
    <div class="row" style="margin-bottom:8px"><input class="i flex1" id="q" placeholder="Cerca ingrediente o fornitore" value="${esc(Q)}"><button class="b p" data-act="nuovoing">+ Ingrediente</button><button class="b" data-act="stampa:listino">Stampa elenco prezzi</button></div>
-   <div class="tabs2"><button class="${!f?'on':''}" data-filt="ing:">Tutti (${ings().length})</button><button class="${f==='vecchi'?'on':''}" data-filt="ing:vecchi">Da aggiornare</button><button class="${f==='senza'?'on':''}" data-filt="ing:senza">Senza prezzo</button>
+   <div class="tabs2"><button class="${!f?'on':''}" data-filt="ing:">Tutti (${ings().length})</button><button class="${f==='vecchi'?'on':''}" data-filt="ing:vecchi">Da aggiornare</button><button class="${f==='senza'?'on':''}" data-filt="ing:senza">Senza prezzo</button><button class="${f==='surg'?'on':''}" data-filt="ing:surg">Surgelati</button><button class="${f==='comp'?'on':''}" data-filt="ing:comp">Composti</button>
    <select class="i" style="width:auto" data-filtsel="ing"><option value="">Fornitore…</option>${forn.map(x=>`<option value="forn:${esc(x)}" ${f==='forn:'+x?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
    <div class="scroll"><table class="t"><tr><th>Ingrediente</th><th>Fornitore</th><th class="n">Prezzo</th><th class="n">Formato</th><th class="n">Costo unitario</th><th>Ultimo prezzo</th><th class="n">Ricette</th></tr>
-   ${I.map(i=>{ const u=unitCost(i), d=lastPriceDate(i), m=monthsSince(d); return `<tr data-ing="${i.id}" style="cursor:pointer"><td>${esc(i.nome)}</td><td class="small">${esc(i.fornitore)}</td><td class="n">${eur(i.prezzo)}</td><td class="n">${fmt(i.formato)} ${esc(i.unita)}</td><td class="n"><b>${u!=null?eur3(u)+'/'+esc(i.unita):'<span class="chip r">manca</span>'}</b></td><td class="small">${d?esc(dIT(d)):'<span class="mut">?</span>'} ${m!=null&&m>=6?'<span class="chip w">vecchio</span>':''}</td><td class="n">${use.get(i.id)||''}</td></tr>`}).join('')}
+   ${I.map(i=>{ const u=unitCost(i), d=lastPriceDate(i), m=monthsSince(d); return `<tr data-ing="${i.id}" style="cursor:pointer"><td>${esc(i.nome)}${i.surgelato?' <span class="chip g">surgelato</span>':''}${i.composizione?' <span class="chip g" title="'+esc(i.composizione)+'">composto</span>':''}</td><td class="small">${esc(i.fornitore)}</td><td class="n">${eur(i.prezzo)}</td><td class="n">${fmt(i.formato)} ${esc(i.unita)}</td><td class="n"><b>${u!=null?eur3(u)+'/'+esc(i.unita):'<span class="chip r">manca</span>'}</b></td><td class="small">${d?esc(dIT(d)):'<span class="mut">?</span>'} ${m!=null&&m>=6?'<span class="chip w">vecchio</span>':''}</td><td class="n">${use.get(i.id)||''}</td></tr>`}).join('')}
    </table></div><p class="small mut">${I.length} ingredienti · prezzi IVA esclusa · clic su una riga per modificarla e vedere lo storico</p></div>`;
 }
 function ingDialog(id){
@@ -24,7 +26,11 @@ function ingDialog(id){
    <div class="row"><label class="f">Nome<input class="i" id="d_nome" value="${esc(i.nome)}"></label><label class="f">Fornitore<input class="i" id="d_forn" value="${esc(i.fornitore)}"></label></div>
    <div class="row"><label class="f s">Prezzo confezione € (IVA escl.)<input class="i" id="d_prezzo" inputmode="decimal" value="${fmt(i.prezzo,4)}"></label><label class="f s">Formato (quantità nella confezione)<input class="i" id="d_formato" inputmode="decimal" value="${fmt(i.formato,4)}"></label>
    <label class="f s">Unità<select class="i" id="d_unita">${['kg','l','pz'].map(u=>`<option ${u===i.unita?'selected':''}>${u}</option>`).join('')}</select></label><label class="f s">Peso per pezzo (kg, solo pz)<input class="i" id="d_pp" inputmode="decimal" value="${fmt(i.pesoPezzo,4)}"></label></div>
-   <label class="row small" style="margin:4px 0 8px"><input type="checkbox" id="d_fisso" ${i.fornitoreFisso?'checked':''}> Fornitore fisso: le fatture di altri fornitori non cambiano il prezzo (puoi sempre scegliere a mano)</label><label class="f">Note<textarea class="i" id="d_note" style="min-height:70px">${esc(i.note)}</textarea></label>
+   <label class="row small" style="margin:4px 0 8px"><input type="checkbox" id="d_fisso" ${i.fornitoreFisso?'checked':''}> Fornitore fisso: le fatture di altri fornitori non cambiano il prezzo (puoi sempre scegliere a mano)</label>
+   <h3>Per l'etichetta</h3>
+   <label class="row small" style="margin:0 0 6px"><input type="checkbox" id="d_surg" ${i.surgelato?'checked':''}> <b>Surgelato</b>: in etichetta avrà l'asterisco (*) e la nota "*Ingrediente surgelato."</label>
+   <div class="row"><label class="f">Nome in etichetta (solo se diverso, es. "margarina vegetale")<input class="i" id="d_neti" value="${esc(i.nomeEtichetta||'')}" placeholder="${esc((i.nome||'').toLowerCase())}"></label></div>
+   <label class="f">Ingredienti di questo prodotto (se è composto: margarina, maionese, pasta sfoglia, bevanda di soia…)<textarea class="i" id="d_comp" style="min-height:60px" placeholder="es. oli e grassi vegetali (palma, girasole), acqua, emulsionante: lecitina di girasole, sale, correttore di acidità: acido citrico, aromi naturali">${esc(i.composizione||'')}</textarea><span class="small mut">Copiali dalla confezione. Non compaiono nel ricettario: servono solo all'etichetta, dove vanno tra parentesi dopo il nome. Allergeni compresi.</span></label><label class="f">Note<textarea class="i" id="d_note" style="min-height:70px">${esc(i.note)}</textarea></label>
    ${used.length?`<p class="small"><b>Usato in:</b> ${used.map(r=>esc(r.nome)).join(', ')}</p>`:''}
    ${(i.storico||[]).length?`<h3>Storico prezzi da fattura</h3><table class="t small"><tr><th>Data</th><th>Fornitore</th><th>Fattura</th><th>Voce</th><th class="n">€/unità</th></tr>${i.storico.slice().reverse().map(s=>`<tr><td>${esc(dIT(s.data))}</td><td>${esc(s.fornitore)}</td><td>${esc(s.fattura)}</td><td>${esc(s.voce)}</td><td class="n">${eur3(s.prezzoUnit)}</td></tr>`).join('')}</table>`:''}
   `,[...(id&&!used.length?[['Elimina','ingdel:'+id,'d']]:[]),['Annulla','dlgclose'],['Salva','ingsave:'+(id||''),'p']]);
@@ -35,7 +41,7 @@ function ingSave(id){
   let i=id?getI(id):null;
   if(!i){ i={id:uid('i-'),storico:[],updatedAt:0,deleted:false}; S.ingredienti.push(i); }
   const oldName=i.nome;
-  Object.assign(i,{nome,fornitore:$('#d_forn').value.trim(),prezzo:num($('#d_prezzo').value),formato:num($('#d_formato').value),unita:$('#d_unita').value,pesoPezzo:num($('#d_pp').value),note:$('#d_note').value,fornitoreFisso:$('#d_fisso').checked});
+  Object.assign(i,{nome,fornitore:$('#d_forn').value.trim(),prezzo:num($('#d_prezzo').value),formato:num($('#d_formato').value),unita:$('#d_unita').value,pesoPezzo:num($('#d_pp').value),note:$('#d_note').value,fornitoreFisso:$('#d_fisso').checked,surgelato:$('#d_surg').checked,nomeEtichetta:$('#d_neti').value.trim(),composizione:$('#d_comp').value.trim().replace(/\s*\.\s*$/,'')});
   touch(i);
   if(oldName&&oldName!==nome) S.ricette.forEach(r=>{ let ch=false; r.righe.forEach(x=>{ if(x.ing===i.id){ x.nome=nome; ch=true; } }); if(ch) touch(r); });
   closeDlg(); commit(); render(); toast('Ingrediente salvato');
