@@ -3,6 +3,11 @@
 PWA (HTML/CSS/JS vanilla) per ricettario, food cost, prezzi d'acquisto e archivio piatti. Utente: Giovanni. Interfaccia in italiano. Pubblicata con GitHub Pages da `main`, root: https://manfredinigio01-bit.github.io/cucina-magiostra/
 Separata dall'app etichette (repo `etichette-magiostra`): fino al 25/11/2026 stava in `etichette-magiostra/cucina/`, spostata qui perché Edge non installava un'app dentro lo scope delle etichette. Lo stesso origin (manfredinigio01-bit.github.io) mantiene IndexedDB: vault e cache restano validi.
 
+## Struttura del codice
+- **Dalla 1.5.0 (25/11/2026, per ora solo in `prova/`)** il codice è diviso per argomento senza cambiare una riga: `index.html` (2 KB), `stile.css`, e in `js/` nell'ordine di caricamento: `base` (PROVA, costanti, utilità, cifratura, IndexedDB), `dati` (stato, sanitize, merge, accesso), `foodcost` (calc, baseCost), `github`, `blocco-e-primo-avvio`, `schermata-quadro` (render, nav, dialoghi, quadro), `schermata-ricette`, `schermata-ingredienti-archivio-impostazioni`, `cartella-drive`, `excel`, `fatture`, `etichette`, `stampa`, `azioni-e-avvio`. Ogni file inizia con `'use strict'` (vale file per file). **L'ordine conta**: script classici con variabili globali condivise; una funzione è disponibile al caricamento solo per i file successivi. Nuovi file: aggiungerli in `index.html` e nella lista `FILES` di `sw.js`.
+- Verifica della divisione: test 19/19, food cost + 109 fogli Excel delle 105 ricette vere identici, 149 schermate con i dati veri identiche (`tests/confronto-schermate.mjs`), primo avvio e funzionamento offline provati in Chrome.
+- Fino alla 1.4.2 (versione normale attuale): tutto in `app.js`.
+
 ## Pubblicare (dal 25/11/2026: sempre passando dalla versione di PROVA, vedi `PROVA.md`)
 1. Modificare SOLO i file in `prova/` (https://manfredinigio01-bit.github.io/cucina-magiostra/prova/). Se non è allineata: `node strumenti/versioni.mjs nuova-prova`.
 2. `node strumenti/versioni.mjs alza X.Y.Z "nota"` alza la versione nei tre punti (`APP_VERSION`, `version.json`, numero della `CACHE` in `sw.js`).
@@ -53,5 +58,5 @@ Fatture FatturaPA .xml/.p7m/.zip (prezzo netto = PrezzoTotale/Quantita; TD04/TD0
 - `npm test` (Node 22 + Playwright, Chrome senza finestra; in locale `CHROME_PATH=/percorso/chrome npm test`). Gira anche su GitHub a ogni push (`.github/workflows/test.yml`): X rossa = non pubblicare.
 - Solo dati INVENTATI in `tests/fixtures/ricettario-prova.json`: questo repository è pubblico, mai ricette o prezzi veri. I valori attesi del food cost sono calcolati a mano nei commenti del test.
 - `tests/fixtures/impronta-foodcost.json`: risultato di `calc()` per ogni ricetta di prova. Se una modifica VOLUTA cambia il food cost, rigenerarla con `AGGIORNA_IMPRONTA=1 npm test` e spiegarlo nel commit.
-- Dati veri, prima e dopo una modifica importante: `node tests/confronto-dati-veri.mjs <ricettario.json> tests/locale/prima.json` (cartella ignorata da git) e confrontare i file.
+- Dati veri, prima e dopo una modifica importante: `node tests/confronto-dati-veri.mjs <ricettario.json> tests/locale/prima.json` (food cost + Excel) e `node tests/confronto-schermate.mjs <ricettario.json> tests/locale/schermate.json` (tutte le schermate), cartella ignorata da git; con `APP_DIR=prova` per la prova. Confrontare i file prima/dopo.
 - v1.4.1: `baseCost()` restituisce costo nullo se la base ha prezzi mancanti (`c.manc`) o se le ricette si contengono a vicenda. Prima la ricetta che la usava risultava "OK" con costo sottostimato. Nessuna ricetta vera usava basi: risultati identici sulle 105 ricette e sui 109 fogli Excel.
