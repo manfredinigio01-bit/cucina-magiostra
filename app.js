@@ -2,7 +2,16 @@
    Dati: repository GitHub PRIVATO (ricettario.json), copia locale CIFRATA con la password (AES-GCM 256, chiave PBKDF2-SHA256).
    Nessuna dipendenza esterna a runtime: lib/ contiene fflate (zip) ed ExcelJS (xlsx), caricate da questo stesso sito. */
 'use strict';
-const APP_VERSION='1.4.1';
+// Versione di PROVA (cartella prova/): stesso codice, dati separati (prefisso "prova_" per IndexedDB e localStorage),
+// GitHub in SOLA LETTURA (nessuna scrittura né sui dati della Cucina né su quelli delle Etichette), niente file nella cartella Drive.
+const PROVA=/\/prova\//.test(location.pathname);
+const PFX=PROVA?'prova_':'';
+if(PROVA){ // ben riconoscibile e non installabile come app
+  document.title='PROVA – '+document.title;
+  document.querySelector('link[rel="manifest"]')?.remove();
+  document.body.insertAdjacentHTML('afterbegin','<div id="provabar" style="background:#ffd54a;color:#3a2a00;padding:6px 20px;font-weight:600;font-size:13px;text-align:center">VERSIONE DI PROVA — dati separati da quelli veri; GitHub si legge ma non si modifica. Per il lavoro vero usa la versione normale.</div>');
+}
+const APP_VERSION='1.4.2';
 const DEF_REPO='manfredinigio01-bit/magiostra-cucina-dati';
 const ETI_REPO='manfredinigio01-bit/etichette-magiostra-dati';
 const DATA_FILE='ricettario.json';
@@ -39,7 +48,7 @@ async function unseal(key,box){ const pt=await crypto.subtle.decrypt({name:'AES-
 
 /* ===================== IndexedDB (chiave/valore) ===================== */
 const IDB={db:null};
-function idb(){ return IDB.db||(IDB.db=new Promise((res,rej)=>{ const r=indexedDB.open('cucina-magiostra',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); })); }
+function idb(){ return IDB.db||(IDB.db=new Promise((res,rej)=>{ const r=indexedDB.open(PFX+'cucina-magiostra',1); r.onupgradeneeded=()=>r.result.createObjectStore('kv'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); })); }
 async function kvGet(k){ const db=await idb(); return new Promise((res,rej)=>{ const r=db.transaction('kv').objectStore('kv').get(k); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
 async function kvSet(k,v){ const db=await idb(); return new Promise((res,rej)=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
 async function kvDel(k){ const db=await idb(); return new Promise((res,rej)=>{ const t=db.transaction('kv','readwrite'); t.objectStore('kv').delete(k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); }
@@ -196,6 +205,7 @@ const STATO_CL={'OK':'ok','Tempi mancanti':'w','Prezzi mancanti':'w','Dosi manca
 
 /* ===================== GITHUB ===================== */
 async function gh(method,path,body){
+  if(PROVA&&method!=='GET'){ toast('Versione di PROVA: niente viene salvato su GitHub'); return new Response(JSON.stringify({content:{sha:'prova'}}),{status:200,headers:{'Content-Type':'application/json'}}); }
   return fetch(GH_API+path,{method,cache:'no-store',headers:{Authorization:'Bearer '+CFG.token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});
 }
 const ghErr=r=>r.status===401?'chiave non valida o scaduta':r.status===403?'accesso negato (permessi della chiave)':r.status===404?'archivio non trovato o chiave senza accesso':'errore GitHub '+r.status;
@@ -249,7 +259,7 @@ let lockT=null;
 function armLock(){ clearTimeout(lockT); lockT=setTimeout(lockNow,LOCK_MIN*60000); }
 ['pointerdown','keydown','wheel','touchstart'].forEach(ev=>addEventListener(ev,()=>{ if(KEY) armLock(); },{passive:true}));
 async function lockNow(){ if(dirty){ try{ await saveLocal(); }catch(e){} } KEY=null; CFG=null; S=null; location.reload(); }
-function failDelay(){ const f=+(localStorage.getItem('cuc_fail')||0); return f<3?0:Math.min(300,2**(f-2)); }
+function failDelay(){ const f=+(localStorage.getItem(PFX+'cuc_fail')||0); return f<3?0:Math.min(300,2**(f-2)); }
 
 async function showLock(){
   const vault=await kvGet('vault');
@@ -294,7 +304,7 @@ async function doSetup(){
   await start();
 }
 async function doUnlock(){
-  const d=failDelay(); const last=+(localStorage.getItem('cuc_failt')||0);
+  const d=failDelay(); const last=+(localStorage.getItem(PFX+'cuc_failt')||0);
   if(d&&now()-last<d*1000) return lmsg(`Troppi tentativi: riprova tra ${Math.ceil((d*1000-(now()-last))/1000)} secondi.`);
   const pw=$('#pw').value; if(!pw) return;
   lmsg('Apro…','good');
@@ -303,10 +313,10 @@ async function doUnlock(){
     const k=await deriveKey(pw,unb64(v.salt),v.iter);
     CFG=await unseal(k,v.box); KEY=k;
   }catch(e){
-    localStorage.setItem('cuc_fail',String(+(localStorage.getItem('cuc_fail')||0)+1)); localStorage.setItem('cuc_failt',String(now()));
+    localStorage.setItem(PFX+'cuc_fail',String(+(localStorage.getItem(PFX+'cuc_fail')||0)+1)); localStorage.setItem(PFX+'cuc_failt',String(now()));
     return lmsg('Password sbagliata.');
   }
-  localStorage.removeItem('cuc_fail');
+  localStorage.removeItem(PFX+'cuc_fail');
   const c=await kvGet('cache');
   try{ S=c?sanitize(await unseal(KEY,c)):emptyData(); }catch(e){ S=emptyData(); }
   reindex();
@@ -600,10 +610,10 @@ function vImpostazioni(){
 let DIR=null, dirState='none', fileT=null, lastFiles=null, filesErr='';
 const XLS_NAME='Cucina La Magiostra - ricettario e food cost.xlsx';
 const BAK_NAME='Cucina La Magiostra - backup dati.json';
-async function dirInit(){ if(!('showDirectoryPicker' in window)) { dirState='nosupport'; return; } try{ DIR=await kvGet('dir'); }catch(e){ DIR=null; } await dirCheck(); }
+async function dirInit(){ if(PROVA||!('showDirectoryPicker' in window)) { dirState='nosupport'; return; } try{ DIR=await kvGet('dir'); }catch(e){ DIR=null; } await dirCheck(); }
 async function dirCheck(){ if(!DIR){ dirState='none'; return; } try{ const p=await DIR.queryPermission({mode:'readwrite'}); dirState=p==='granted'?'ok':'ask'; }catch(e){ dirState='ask'; } }
 function dirBox(){
-  if(dirState==='nosupport') return `<p class="small">Questo browser non può scrivere nelle cartelle (serve Chrome o Edge su Mac/Windows). Puoi sempre scaricare i file:</p><div class="row"><button class="b" data-act="scaricaxls">Scarica Excel</button><button class="b" data-act="scaricajson">Scarica backup dati</button></div>`;
+  if(dirState==='nosupport') return `<p class="small">${PROVA?'Versione di PROVA: niente file nella cartella Drive.':'Questo browser non può scrivere nelle cartelle (serve Chrome o Edge su Mac/Windows).'} Puoi sempre scaricare i file:</p><div class="row"><button class="b" data-act="scaricaxls">Scarica Excel</button><button class="b" data-act="scaricajson">Scarica backup dati</button></div>`;
   return `<p class="small">Collega la cartella di Google Drive sul computer (es. <i>Il mio Drive › La Magiostra › Cucina</i>). A ogni modifica l'app scrive lì, entro un minuto:</p>
    <ul class="small"><li><b>${esc(XLS_NAME)}</b>: il ricettario con le formule, come il tuo v10</li><li><b>${esc(BAK_NAME)}</b>: copia completa dei dati</li><li>cartella <b>Backup Cucina</b>: una copia al giorno</li></ul>
    ${dirState==='ok'?`<div class="good small">Collegata: <b>${esc(DIR.name)}</b>${lastFiles?' · file aggiornati alle '+lastFiles.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):''}</div>`:dirState==='ask'?`<div class="warn small">Cartella <b>${esc(DIR.name)}</b>: Chrome chiede di nuovo il permesso.</div>`:''}
@@ -616,7 +626,7 @@ async function dirPerm(){ try{ const p=await DIR.requestPermission({mode:'readwr
 function scheduleFiles(){ if(dirState!=='ok') return; clearTimeout(fileT); fileT=setTimeout(writeFiles,45000); }
 async function writeTo(dir,name,data){ const fh=await dir.getFileHandle(name,{create:true}); const w=await fh.createWritable(); await w.write(data); await w.close(); }
 async function writeFiles(){
-  if(dirState!=='ok'||!S) return;
+  if(PROVA||dirState!=='ok'||!S) return;
   try{
     const json=JSON.stringify(S,null,1);
     await writeTo(DIR,BAK_NAME,new Blob([json],{type:'application/json'}));

@@ -3,8 +3,12 @@
 PWA (HTML/CSS/JS vanilla) per ricettario, food cost, prezzi d'acquisto e archivio piatti. Utente: Giovanni. Interfaccia in italiano. Pubblicata con GitHub Pages da `main`, root: https://manfredinigio01-bit.github.io/cucina-magiostra/
 Separata dall'app etichette (repo `etichette-magiostra`): fino al 25/11/2026 stava in `etichette-magiostra/cucina/`, spostata qui perché Edge non installava un'app dentro lo scope delle etichette. Lo stesso origin (manfredinigio01-bit.github.io) mantiene IndexedDB: vault e cache restano validi.
 
-## Pubblicare
-Alzare la versione in tre punti: `APP_VERSION` in `app.js`, `version.json`, `CACHE` in `sw.js`. Commit e push su `main`.
+## Pubblicare (dal 25/11/2026: sempre passando dalla versione di PROVA, vedi `PROVA.md`)
+1. Modificare SOLO i file in `prova/` (https://manfredinigio01-bit.github.io/cucina-magiostra/prova/). Se non è allineata: `node strumenti/versioni.mjs nuova-prova`.
+2. `node strumenti/versioni.mjs alza X.Y.Z "nota"` alza la versione nei tre punti (`APP_VERSION`, `version.json`, numero della `CACHE` in `sw.js`).
+3. `APP_DIR=prova npm test`, commit e push; Giovanni prova.
+4. Approvato: salvare la versione in uso nel Drive `software` (1-IN-USO → 2-PRECEDENTE → storico), `node strumenti/versioni.mjs promuovi`, `npm test`, commit e push.
+- In prova (`PROVA` = percorso con `/prova/`): IndexedDB `prova_cucina-magiostra` e chiavi `prova_cuc_*` (`PFX`), `gh()` blocca ogni richiesta che non sia GET (finta risposta ok + avviso), niente cartella Drive (`dirInit`), fascia `#provabar`, niente manifest. `sw.js` unico: con scope `/prova/` cache `prova-cucina-vN`; quello normale ignora `/prova/`.
 
 ## Dati
 - Repo PRIVATO `manfredinigio01-bit/magiostra-cucina-dati`, file `ricettario.json` (parametri, ingredienti con storico, packaging, ricette, archivio piatti, stagionalità, mappaFatture voce→ingrediente, importati). `sanitize()` su tutto ciò che si carica: ogni campo nuovo va aggiunto lì.
