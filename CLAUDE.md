@@ -26,6 +26,12 @@ Alzare la versione in tre punti: `APP_VERSION` in `app.js`, `version.json`, `CAC
 - Le liste (`.list`, `.scroll`) conservano lo scorrimento a ogni render.
 - Verifica Excel: per ricalcolare davvero con LibreOffice bisogna togliere i risultati salvati (riaprire e salvare con openpyxl), altrimenti LibreOffice mostra i valori in cache. 25/11: 1668 celle, 0 differenze.
 
+## Fatture: cucina o negozio (v1.3.0, 25/11/2026)
+- `S.fornitori` [{id,nome,alias[],regola:'cucina'|'negozio'|'misto'}]: nome unico del fornitore (le fatture lo scrivono in modi diversi) e regola. Granchef (Woerndle) e Mulino Sobrino = tutto cucina; gli altri misto.
+- Per riga: `dest` 'cucina' | 'negozio' | '?' / '?cucina' (da decidere, l'app non applica finché Giovanni non sceglie). Ordine: mappa voce→negozio ricordata, regola del fornitore, abbinamento sicuro (mappa voce→ingrediente), altrimenti da decidere.
+- Cucina: aggiorna l'ingrediente (prezzo, formato, fornitore = nome unico, storico) oppure lo crea nuovo (nome proposto da `nomeDaVoce`). Negozio: salvato in `mappaFatture` con `negozio:true` e saltato le volte dopo.
+- Per ingrediente vale una sola riga (la più recente, poi formato più grande) e mai una fattura più vecchia dell'ultimo prezzo. `ingrediente.fornitoreFisso`: le fatture di altri fornitori non cambiano il prezzo.
+
 ## File in ingresso (letti in locale)
 Fatture FatturaPA .xml/.p7m/.zip (prezzo netto = PrezzoTotale/Quantita; TD04/TD05 ignorate; farine solo Mulino Sobrino; riga più recente / formato più grande), PROPOSTE della GASTRONOMIA .docx → archivio piatti e prezzo al banco, .xlsx con colonne descrizione/prezzo. PDF e foto: li elabora Claude in chat.
 

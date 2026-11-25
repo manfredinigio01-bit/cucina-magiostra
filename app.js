@@ -2,7 +2,7 @@
    Dati: repository GitHub PRIVATO (ricettario.json), copia locale CIFRATA con la password (AES-GCM 256, chiave PBKDF2-SHA256).
    Nessuna dipendenza esterna a runtime: lib/ contiene fflate (zip) ed ExcelJS (xlsx), caricate da questo stesso sito. */
 'use strict';
-const APP_VERSION='1.2.0';
+const APP_VERSION='1.3.0';
 const DEF_REPO='manfredinigio01-bit/magiostra-cucina-dati';
 const ETI_REPO='manfredinigio01-bit/etichette-magiostra-dati';
 const DATA_FILE='ricettario.json';
@@ -52,7 +52,7 @@ let ETI=null;      // archivio etichette (sola lettura salvo azioni esplicite)
 let TAB='quadro', SEL=null, EDIT=null, Q='', FILT={};
 let dirty=false, syncing=false, pending=false, lastSync=null;
 
-function emptyData(){ return {version:1,updatedAt:0,parametri:{costoOrario:18,energiaOra:5,affittoMese:400,settimaneMese:4,giorniSettimana:5,oreGiorno:6,quotaAffitto:.5,iva:.1,ricaricoDef:.7,packagingDef:.5,altriFissiMese:230,note:{},updatedAt:0},ingredienti:[],packaging:[],ricette:[],archivio:[],stagionalita:[],mappaFatture:[],importati:[]}; }
+function emptyData(){ return {version:1,updatedAt:0,parametri:{costoOrario:18,energiaOra:5,affittoMese:400,settimaneMese:4,giorniSettimana:5,oreGiorno:6,quotaAffitto:.5,iva:.1,ricaricoDef:.7,packagingDef:.5,altriFissiMese:230,note:{},updatedAt:0},ingredienti:[],packaging:[],ricette:[],archivio:[],stagionalita:[],mappaFatture:[],importati:[],fornitori:[]}; }
 
 /* ===================== PULIZIA DATI ===================== */
 const str=(v,max=4000)=>String(v??'').slice(0,max);
@@ -64,7 +64,7 @@ function sanitize(D){
   for(const k of ['costoOrario','energiaOra','affittoMese','settimaneMese','giorniSettimana','oreGiorno','quotaAffitto','iva','ricaricoDef','packagingDef','altriFissiMese']){ const v=nn(P[k],0,100000); if(v!=null) po[k]=v; }
   po.note={}; if(P.note&&typeof P.note==='object') for(const k in P.note) if(/^[a-zA-Z]{1,30}$/.test(k)) po.note[k]=str(P.note[k],1500);
   po.updatedAt=nn(P.updatedAt,0)||0;
-  o.ingredienti=(Array.isArray(D.ingredienti)?D.ingredienti:[]).slice(0,3000).map(i=>({id:okid(i.id,'i-'),nome:str(i.nome,120).trim(),fornitore:str(i.fornitore,80),prezzo:nn(i.prezzo,0,1e6),formato:nn(i.formato,0,1e5),unita:['kg','l','pz'].includes(i.unita)?i.unita:'kg',pesoPezzo:nn(i.pesoPezzo,0,1000),note:str(i.note,1500),
+  o.ingredienti=(Array.isArray(D.ingredienti)?D.ingredienti:[]).slice(0,3000).map(i=>({id:okid(i.id,'i-'),nome:str(i.nome,120).trim(),fornitore:str(i.fornitore,80),prezzo:nn(i.prezzo,0,1e6),formato:nn(i.formato,0,1e5),unita:['kg','l','pz'].includes(i.unita)?i.unita:'kg',pesoPezzo:nn(i.pesoPezzo,0,1000),note:str(i.note,1500),fornitoreFisso:!!i.fornitoreFisso,
     storico:(Array.isArray(i.storico)?i.storico:[]).slice(-60).map(s=>({data:str(s.data,20),prezzoUnit:nn(s.prezzoUnit,0,1e6),prima:nn(s.prima,0,1e6),fornitore:str(s.fornitore,80),fattura:str(s.fattura,40),voce:str(s.voce,200)})),
     updatedAt:nn(i.updatedAt,0)||0,deleted:!!i.deleted})).filter(i=>i.nome);
   o.packaging=(Array.isArray(D.packaging)?D.packaging:[]).slice(0,300).map(p=>({id:okid(p.id,'p-'),nome:str(p.nome,120),fornitore:str(p.fornitore,80),prezzo:nn(p.prezzo,0,1e6),pezzi:nn(p.pezzi,0,1e6)||1,updatedAt:nn(p.updatedAt,0)||0,deleted:!!p.deleted})).filter(p=>p.nome);
@@ -76,7 +76,8 @@ function sanitize(D){
   o.archivio=(Array.isArray(D.archivio)?D.archivio:[]).slice(0,5000).map(a=>({id:okid(a.id,'a-'),nome:str(a.nome,200),tipo:a.tipo==='dolce'?'dolce':'salato',categoria:str(a.categoria,60),stagioni:(Array.isArray(a.stagioni)?a.stagioni:[]).filter(s=>['primavera','estate','autunno','inverno'].includes(s)),
     mesi:str(a.mesi,120),ultimoPrezzo:nn(a.ultimoPrezzo,0,10000),unita:str(a.unita,20),volte:nn(a.volte,0,100000)||0,prima:str(a.prima,20),ultima:str(a.ultima,20),materiaPrima:str(a.materiaPrima,120),ricetta:a.ricetta&&ID_OK.test(a.ricetta)?a.ricetta:'',updatedAt:nn(a.updatedAt,0)||0,deleted:!!a.deleted})).filter(a=>a.nome);
   o.stagionalita=(Array.isArray(D.stagionalita)?D.stagionalita:[]).slice(0,300).map(s=>({nome:str(s.nome,80),mesi:(Array.isArray(s.mesi)?s.mesi:[]).map(Number).filter(m=>m>=0&&m<12)}));
-  o.mappaFatture=(Array.isArray(D.mappaFatture)?D.mappaFatture:[]).slice(0,5000).map(m=>({voce:str(m.voce,200),fornitore:str(m.fornitore,80),ing:m.ing&&ID_OK.test(m.ing)?m.ing:null,formato:nn(m.formato,0,1e5),updatedAt:nn(m.updatedAt,0)||0})).filter(m=>m.voce&&m.ing);
+  o.mappaFatture=(Array.isArray(D.mappaFatture)?D.mappaFatture:[]).slice(0,8000).map(m=>({voce:str(m.voce,200),fornitore:str(m.fornitore,80),ing:m.ing&&ID_OK.test(m.ing)?m.ing:null,formato:nn(m.formato,0,1e5),negozio:!!m.negozio,updatedAt:nn(m.updatedAt,0)||0})).filter(m=>m.voce&&(m.ing||m.negozio));
+  o.fornitori=(Array.isArray(D.fornitori)?D.fornitori:[]).slice(0,500).map(f=>({id:okid(f.id,'f-'),nome:str(f.nome,80).trim(),alias:(Array.isArray(f.alias)?f.alias:[]).slice(0,20).map(a=>str(a,60).trim()).filter(Boolean),regola:['cucina','negozio','misto'].includes(f.regola)?f.regola:'misto',updatedAt:nn(f.updatedAt,0)||0,deleted:!!f.deleted})).filter(f=>f.nome);
   o.importati=(Array.isArray(D.importati)?D.importati:[]).slice(-3000).map(x=>str(x,200));
   o.updatedAt=nn(D.updatedAt,0)||0;
   return o;
@@ -85,7 +86,7 @@ function mergeColl(a,b){ const m=new Map(); for(const x of a||[]) m.set(x.id,x);
 function merge(a,b){ // b = archivio online: a parità vince b
   const o=emptyData();
   o.parametri=(b.parametri.updatedAt||0)>=(a.parametri.updatedAt||0)?b.parametri:a.parametri;
-  for(const k of ['ingredienti','packaging','ricette','archivio']) o[k]=mergeColl(a[k],b[k]);
+  for(const k of ['ingredienti','packaging','ricette','archivio','fornitori']) o[k]=mergeColl(a[k],b[k]);
   o.stagionalita=b.stagionalita.length?b.stagionalita:a.stagionalita;
   const mk=x=>x.voce.toUpperCase()+'|'+x.fornitore.toUpperCase(); const mm=new Map();
   for(const x of a.mappaFatture) mm.set(mk(x),x); for(const y of b.mappaFatture){ const x=mm.get(mk(y)); if(!x||(y.updatedAt||0)>=(x.updatedAt||0)) mm.set(mk(y),y); }
@@ -502,7 +503,7 @@ function ingDialog(id){
    <div class="row"><label class="f">Nome<input class="i" id="d_nome" value="${esc(i.nome)}"></label><label class="f">Fornitore<input class="i" id="d_forn" value="${esc(i.fornitore)}"></label></div>
    <div class="row"><label class="f s">Prezzo confezione € (IVA escl.)<input class="i" id="d_prezzo" inputmode="decimal" value="${fmt(i.prezzo,4)}"></label><label class="f s">Formato (quantità nella confezione)<input class="i" id="d_formato" inputmode="decimal" value="${fmt(i.formato,4)}"></label>
    <label class="f s">Unità<select class="i" id="d_unita">${['kg','l','pz'].map(u=>`<option ${u===i.unita?'selected':''}>${u}</option>`).join('')}</select></label><label class="f s">Peso per pezzo (kg, solo pz)<input class="i" id="d_pp" inputmode="decimal" value="${fmt(i.pesoPezzo,4)}"></label></div>
-   <label class="f">Note<textarea class="i" id="d_note" style="min-height:70px">${esc(i.note)}</textarea></label>
+   <label class="row small" style="margin:4px 0 8px"><input type="checkbox" id="d_fisso" ${i.fornitoreFisso?'checked':''}> Fornitore fisso: le fatture di altri fornitori non cambiano il prezzo (puoi sempre scegliere a mano)</label><label class="f">Note<textarea class="i" id="d_note" style="min-height:70px">${esc(i.note)}</textarea></label>
    ${used.length?`<p class="small"><b>Usato in:</b> ${used.map(r=>esc(r.nome)).join(', ')}</p>`:''}
    ${(i.storico||[]).length?`<h3>Storico prezzi da fattura</h3><table class="t small"><tr><th>Data</th><th>Fornitore</th><th>Fattura</th><th>Voce</th><th class="n">€/unità</th></tr>${i.storico.slice().reverse().map(s=>`<tr><td>${esc(dIT(s.data))}</td><td>${esc(s.fornitore)}</td><td>${esc(s.fattura)}</td><td>${esc(s.voce)}</td><td class="n">${eur3(s.prezzoUnit)}</td></tr>`).join('')}</table>`:''}
   `,[...(id&&!used.length?[['Elimina','ingdel:'+id,'d']]:[]),['Annulla','dlgclose'],['Salva','ingsave:'+(id||''),'p']]);
@@ -513,7 +514,7 @@ function ingSave(id){
   let i=id?getI(id):null;
   if(!i){ i={id:uid('i-'),storico:[],updatedAt:0,deleted:false}; S.ingredienti.push(i); }
   const oldName=i.nome;
-  Object.assign(i,{nome,fornitore:$('#d_forn').value.trim(),prezzo:num($('#d_prezzo').value),formato:num($('#d_formato').value),unita:$('#d_unita').value,pesoPezzo:num($('#d_pp').value),note:$('#d_note').value});
+  Object.assign(i,{nome,fornitore:$('#d_forn').value.trim(),prezzo:num($('#d_prezzo').value),formato:num($('#d_formato').value),unita:$('#d_unita').value,pesoPezzo:num($('#d_pp').value),note:$('#d_note').value,fornitoreFisso:$('#d_fisso').checked});
   touch(i);
   if(oldName&&oldName!==nome) S.ricette.forEach(r=>{ let ch=false; r.righe.forEach(x=>{ if(x.ing===i.id){ x.nome=nome; ch=true; } }); if(ch) touch(r); });
   closeDlg(); commit(); render(); toast('Ingrediente salvato');
@@ -552,6 +553,9 @@ function vImpostazioni(){
    <div class="card"><h2>Packaging</h2><table class="t"><tr><th>Packaging</th><th>Fornitore</th><th class="n">Prezzo</th><th class="n">Pezzi</th><th class="n">€/pz</th><th></th></tr>
    ${packs().map(p=>`<tr><td><input class="i" data-pk="${p.id}" data-f="nome" value="${esc(p.nome)}"></td><td><input class="i" data-pk="${p.id}" data-f="fornitore" value="${esc(p.fornitore)}"></td><td class="n"><input class="i n" data-pk="${p.id}" data-f="prezzo" value="${fmt(p.prezzo,4)}"></td><td class="n"><input class="i n" data-pk="${p.id}" data-f="pezzi" value="${fmt(p.pezzi)}"></td><td class="n">${eur3((p.prezzo||0)/(p.pezzi||1))}</td><td><button class="b sm d" data-act="pkdel:${p.id}">✕</button></td></tr>`).join('')}</table>
    <div class="row" style="margin-top:8px"><button class="b sm" data-act="pkadd">+ Packaging</button><button class="b sm p" data-act="pksave">Salva packaging</button></div></div>
+   <div class="card"><h2>Fornitori</h2><p class="small mut">Il nome unico e i modi in cui compare nelle fatture (separati da virgola). La regola decide dove vanno le righe delle fatture: <b>tutto alla cucina</b> (es. Granchef), <b>tutto al negozio</b>, oppure <b>misto</b>: l'app propone e decidi tu riga per riga, poi si ricorda la scelta.</p>
+   <div class="scroll"><table class="t small"><tr><th>Fornitore</th><th>Come compare in fattura</th><th>Regola</th><th></th></tr>${S.fornitori.filter(f=>!f.deleted).sort((a,b)=>a.nome.localeCompare(b.nome,'it')).map(f=>`<tr><td><input class="i" data-fo="${f.id}" data-f="nome" value="${esc(f.nome)}"></td><td><input class="i" data-fo="${f.id}" data-f="alias" value="${esc(f.alias.join(', '))}"></td><td><select class="i" data-fo="${f.id}" data-f="regola">${[['misto','misto: chiedi'],['cucina','tutto alla cucina'],['negozio','tutto al negozio']].map(([v,t])=>`<option value="${v}" ${f.regola===v?'selected':''}>${t}</option>`).join('')}</select></td><td><button class="b sm d" data-act="fdel:${f.id}">✕</button></td></tr>`).join('')}</table></div>
+   <div class="row" style="margin-top:8px"><button class="b sm" data-act="fadd">+ Fornitore</button><button class="b sm p" data-act="fsave">Salva fornitori</button></div></div>
    <div class="card"><h2>Cartella Drive e file</h2>${dirBox()}</div>
    <div class="card"><h2>Sicurezza</h2>
     <p class="small">Questo computer: <b>${esc(CFG.nome||'senza nome')}</b> · archivio <b>${esc(CFG.repo)}</b>. L'app si blocca dopo ${LOCK_MIN} minuti senza uso. Chiave e copia locale sono cifrate con la tua password.</p>
@@ -799,68 +803,105 @@ function guessFormato(voce,um){
   if(u==='G'||u==='GR') return {f:v/1000*mult,u:'kg'}; if(u==='KG') return {f:v*mult,u:'kg'};
   if(u==='ML') return {f:v/1000*mult,u:'l'}; if(u==='CL') return {f:v/100*mult,u:'l'}; return {f:v*mult,u:'l'};
 }
+/* --- Fornitori: nome unico + regola cucina / negozio / misto --- */
+const SOC=/\b(s\.?r\.?l\.?s?|s\.?p\.?a\.?|s\.?n\.?c\.?|s\.?a\.?s\.?|soc(ieta)?|coop(erativa)?|agricola|az(ienda)?|di|e|c|srls|spa|srl|snc|sas|unipersonale|semplificata|a r\.?l\.?)\b/g;
+function fornMatch(raw){
+  const r=' '+norm(raw)+' ';
+  let best=null,bl=0;
+  for(const f of S.fornitori.filter(f=>!f.deleted)) for(const a of [f.nome,...f.alias]){ const n=norm(a); if(!n) continue;
+    const hit=n.length<=3?r.includes(' '+n+' '):r.includes(n)||(norm(raw).length>=4&&n.includes(norm(raw)));
+    if(hit&&n.length>bl){ best=f; bl=n.length; } }
+  return best;
+}
+function fornNome(raw){ const f=fornMatch(raw); if(f) return f.nome; const w=norm(raw).replace(SOC,' ').trim().split(/\s+/).slice(0,3).join(' '); return w.replace(/\b\w/g,c=>c.toUpperCase())||raw; }
+function fornRegola(raw){ const f=fornMatch(raw); return f?f.regola:'misto'; }
 function suggest(voce,forn){
-  const key=voce.toUpperCase();
-  let m=S.mappaFatture.find(x=>x.voce.toUpperCase()===key&&(!forn||!x.fornitore||norm(forn).includes(norm(x.fornitore).split(' ')[0])));
-  if(!m) m=S.mappaFatture.find(x=>x.voce.toUpperCase()===key);
-  if(m&&getI(m.ing)&&!getI(m.ing).deleted) return {ing:m.ing,sure:true,formato:m.formato};
+  const key=voce.toUpperCase(), fn=fornNome(forn);
+  const ms=S.mappaFatture.filter(x=>x.voce.toUpperCase()===key);
+  const m=ms.find(x=>x.fornitore===fn)||ms[0];
+  if(m&&m.negozio) return {negozio:true,sure:true};
+  if(m&&m.ing&&getI(m.ing)&&!getI(m.ing).deleted) return {ing:m.ing,sure:true,formato:m.formato};
   const w=new Set(norm(voce).split(' ').filter(x=>x.length>2&&!/^\d/.test(x)));
   let best=null,bs=0;
   for(const i of ings()){ const iw=norm(i.nome).split(' ').filter(x=>x.length>2); if(!iw.length) continue; const hit=iw.filter(x=>w.has(x)||[...w].some(y=>y.startsWith(x.slice(0,5))&&x.length>4)).length; const sc=hit/iw.length; if(sc>bs){bs=sc;best=i;} }
   return bs>=0.99?{ing:best.id,sure:false}:bs>=0.5?{ing:best.id,sure:false,weak:true}:{ing:null};
 }
+function nomeDaVoce(v){ let t=String(v).replace(/^\s*[\d.\-\/]{4,}\s+/,'').replace(/\b\d+(?:[.,]\d+)?\s*(KG|GR|G|LT|L|ML|CL|PZ|X)\b/gi,'').replace(/\b(BIO|BIOLOGIC[OA]|S\/G|NSI|FDL|CONF|SACCO|BUSTA|VASO|LATTA|BRIK|BRICK|TETRA|PET)\b\.?/gi,'').replace(/[^A-Za-zÀ-ÿ' ]+/g,' ').replace(/\s+/g,' ').trim().toLowerCase(); return t.charAt(0).toUpperCase()+t.slice(1); }
 function prepInvoice(){
   if(!IMP) return;
   IMP.righe.sort((a,b)=>String(b.data).localeCompare(String(a.data)));
   for(const r of IMP.righe){
-    const s=suggest(r.voce,r.fornitore); r.ing=s.ing; r.sure=!!s.sure; r.weak=!!s.weak;
-    const g=guessFormato(r.voce,r.um); r.formato=s.formato||(g?g.f:null);
+    r.forn=fornNome(r.fornitore); r.regola=fornRegola(r.fornitore);
+    const s=suggest(r.voce,r.fornitore); r.ing=s.ing||null; r.sure=!!s.sure; r.weak=!!s.weak; r.why='';
+    const g=guessFormato(r.voce,r.um); r.formato=s.formato||(g?g.f:null); r.unitaNuovo=g?g.u:'kg';
     r.key=(r.fornitore+'|'+r.numero+'|'+r.voce).slice(0,200);
-    r.on=!!r.ing&&!!r.formato;
+    r.nuovo=nomeDaVoce(r.voce);
+    // dove va: cucina / negozio / da decidere
+    if(s.negozio){ r.dest='negozio'; r.why='ricordato come prodotto del negozio'; }
+    else if(r.regola==='negozio') r.dest='negozio';
+    else if(r.ing&&(s.sure||r.regola==='cucina')) r.dest='cucina';
+    else if(r.regola==='cucina') r.dest='cucina';
+    else r.dest=r.ing?'?cucina':'?';
+    if(S.importati.includes(r.key)){ r.dest='fatto'; r.why='già importata'; }
     const i=r.ing&&getI(r.ing);
-    if(i){ const last=lastPriceDate(i); if(last&&r.data&&r.data<last){ r.on=false; r.why='prezzo più vecchio di quello già registrato'; }
-      if(/^farin/i.test(i.nome)&&!/sobrino/i.test(r.fornitore)){ r.on=false; r.why='farine: solo prezzi Mulino Sobrino'; } }
-    if(S.importati.includes(r.key)){ r.on=false; r.why='già importata'; }
+    r.skip=false;
+    if(i&&r.dest!=='fatto'){ const last=lastPriceDate(i);
+      if(last&&r.data&&r.data<last){ r.skip=true; r.why='prezzo più vecchio di quello già registrato'; }
+      if(/^farin/i.test(i.nome)&&!/sobrino/i.test(r.forn)){ r.skip=true; r.why='farine: solo prezzi Mulino Sobrino'; }
+      if(i.fornitoreFisso&&norm(i.fornitore)!==norm(r.forn)){ r.skip=true; r.why='fornitore fisso: '+i.fornitore; } }
   }
-  // stesso ingrediente più volte: tiene la riga più recente, a parità il formato più grande
-  const byIng=new Map(); for(const r of IMP.righe.filter(r=>r.on)){ const o=byIng.get(r.ing); if(!o||r.data>o.data||(r.data===o.data&&(r.formato||0)>(o.formato||0))) byIng.set(r.ing,r); }
-  for(const r of IMP.righe) if(r.on&&byIng.get(r.ing)!==r){ r.on=false; r.why='c\'è una riga più recente o un formato più grande'; }
+  const byIng=new Map(); for(const r of IMP.righe.filter(r=>r.dest==='cucina'&&r.ing&&!r.skip)){ const o=byIng.get(r.ing); if(!o||r.data>o.data||(r.data===o.data&&(r.formato||0)>(o.formato||0))) byIng.set(r.ing,r); }
+  for(const r of IMP.righe) if(r.dest==='cucina'&&r.ing&&!r.skip&&byIng.get(r.ing)!==r){ r.skip=true; r.why='c\'è una riga più recente o un formato più grande'; }
 }
+const willApply=r=>r.dest==='cucina'&&!r.skip&&r.formato>0&&(r.ing||r.nuovo);
 function impView(){
-  const R=IMP.righe; const sel=R.filter(r=>r.on).length; const opts=ings();
+  const R=IMP.righe.filter(r=>r.dest!=='fatto'); const opts=ings();
+  const nC=R.filter(willApply).length, nN=R.filter(r=>r.dest==='negozio').length, nQ=R.filter(r=>r.dest[0]==='?').length;
+  const forns=[...new Map(R.map(r=>[r.forn,r])).values()];
   const P=IMP.proposte;
   return `${IMP.note.length?`<div class="card">${IMP.note.map(n=>`<div class="warn small">${esc(n)}</div>`).join('')}</div>`:''}
   ${R.length?`<div class="card"><h2>Righe di fattura (${R.length})</h2>
-   <p class="small">Controlla l'ingrediente e il <b>formato</b> (kg, litri o pezzi contenuti in UNA unità di fattura: es. "Aceto 250ML" = 0,25). Il prezzo è quello netto pagato (sconti già tolti), IVA esclusa. Le righe spuntate aggiornano il prezzo; l'abbinamento voce → ingrediente viene ricordato per le prossime fatture.</p>
-   <div class="row" style="margin-bottom:8px"><button class="b p" data-act="applicafatt" ${sel?'':'disabled'}>Aggiorna ${sel} prezzi</button><button class="b" data-act="chiudiimp">Chiudi</button></div>
-   <div class="scroll"><table class="t small"><tr><th></th><th>Data · fornitore</th><th>Voce in fattura</th><th class="n">Prezzo netto</th><th>Ingrediente</th><th class="n">Formato</th><th class="n">Nuovo €/unità</th><th class="n">Prima</th></tr>
-   ${R.map((r,k)=>{ const i=r.ing&&getI(r.ing); const nu=r.formato?r.netto/r.formato:null; const old=i?unitCost(i):null; const v=nu&&old?nu/old-1:null; return `<tr>
-    <td><input type="checkbox" data-imp="${k}" data-f="on" ${r.on?'checked':''}></td>
-    <td>${esc(dIT(r.data))}<br><span class="mut">${esc(r.fornitore.slice(0,28))} n. ${esc(r.numero)}</span></td>
+   <div class="small" style="margin-bottom:8px">${forns.map(r=>{ const f=fornMatch(r.fornitore); return `<span class="row" style="display:inline-flex;margin:0 14px 6px 0"><b>${esc(r.forn)}</b>&nbsp;<select class="i" style="width:auto" data-fregola="${esc(r.fornitore)}"><option value="misto" ${!f||f.regola==='misto'?'selected':''}>cucina e negozio: chiedi</option><option value="cucina" ${f&&f.regola==='cucina'?'selected':''}>tutto alla cucina</option><option value="negozio" ${f&&f.regola==='negozio'?'selected':''}>tutto al negozio</option></select></span>`}).join('')}</div>
+   <p class="small">Per ogni riga scegli <b>Cucina</b> (aggiorna o crea l'ingrediente col prezzo nuovo) o <b>Negozio</b> (ignorata; la ricordo e la prossima volta la salto da sola). Prezzo netto pagato, IVA esclusa. Il <b>formato</b> è la quantità in UNA unità di fattura (es. "Ceci 1KG" = 1).</p>
+   <div class="row" style="margin-bottom:8px"><button class="b p" data-act="applicafatt" ${nC+nN?'':'disabled'}>Conferma: ${nC} prezzi in cucina, ${nN} al negozio</button>${nQ?`<span class="chip w">${nQ} da decidere</span> <button class="b sm" data-act="restonegozio">Tutte le "da decidere" al negozio</button>`:''}<button class="b" data-act="chiudiimp">Chiudi</button></div>
+   <div class="scroll"><table class="t small"><tr><th>Data · fornitore</th><th>Voce in fattura</th><th class="n">Prezzo netto</th><th>Dove va</th><th>Ingrediente</th><th class="n">Formato</th><th class="n">Nuovo €/unità</th><th class="n">Prima</th></tr>
+   ${R.map(r=>{ const k=IMP.righe.indexOf(r); const i=r.ing&&getI(r.ing); const nu=r.formato?r.netto/r.formato:null; const old=i?unitCost(i):null; const v=nu&&old?nu/old-1:null; const cu=r.dest==='cucina'||r.dest==='?cucina';
+    return `<tr style="${r.dest==='negozio'?'opacity:.55':''}">
+    <td>${esc(dIT(r.data))}<br><span class="mut">${esc(r.forn)} n. ${esc(r.numero)}</span></td>
     <td>${esc(r.voce)}${r.qta?`<br><span class="mut">q.tà ${fmt(r.qta,2)} ${esc(r.um)}</span>`:''}${r.why?`<br><span class="chip g">${esc(r.why)}</span>`:''}</td>
     <td class="n">${eur3(r.netto)}</td>
-    <td><select class="i" data-imp="${k}" data-f="ing"><option value="">— non è un ingrediente —</option>${opts.map(o=>`<option value="${o.id}" ${o.id===r.ing?'selected':''}>${esc(o.nome)}</option>`).join('')}</select>${r.ing&&!r.sure?`<span class="chip ${r.weak?'w':'g'}">${r.weak?'da controllare':'proposto'}</span>`:''}</td>
-    <td class="n"><input class="i n" data-imp="${k}" data-f="formato" value="${fmt(r.formato,4)}" inputmode="decimal" style="width:80px"> ${i?esc(i.unita):''}</td>
-    <td class="n"><b>${nu?eur3(nu):'–'}</b></td><td class="n">${old!=null?eur3(old):'–'}${v!=null?`<br><span class="chip ${v>0.05?'r':v<-0.05?'ok':'g'}">${v>0?'+':''}${pct(v)}</span>`:''}</td></tr>`}).join('')}
+    <td style="white-space:nowrap"><button class="b sm ${r.dest==='cucina'?'p':''}" data-act="dest:${k}:cucina">Cucina</button> <button class="b sm ${r.dest==='negozio'?'p':''}" data-act="dest:${k}:negozio">Negozio</button>${r.dest[0]==='?'?'<br><span class="chip w">da decidere</span>':''}</td>
+    <td>${cu?`<select class="i" data-imp="${k}" data-f="ing"><option value="">+ nuovo ingrediente</option>${opts.map(o=>`<option value="${o.id}" ${o.id===r.ing?'selected':''}>${esc(o.nome)} (${esc(o.fornitore||'?')})</option>`).join('')}</select>${!r.ing?`<input class="i" data-imp="${k}" data-f="nuovo" value="${esc(r.nuovo)}" placeholder="nome del nuovo ingrediente">`:''}${r.ing&&!r.sure?`<span class="chip ${r.weak?'w':'g'}">${r.weak?'abbinamento incerto':'proposto'}</span>`:''}${i&&norm(i.fornitore)!==norm(r.forn)?`<br><span class="small mut">ora: ${esc(i.fornitore||'?')} → diventa ${esc(r.forn)}</span>`:''}`:''}</td>
+    <td class="n">${cu?`<input class="i n" data-imp="${k}" data-f="formato" value="${fmt(r.formato,4)}" inputmode="decimal" style="width:80px"> ${i?esc(i.unita):esc(r.unitaNuovo)}`:''}</td>
+    <td class="n"><b>${cu&&nu?eur3(nu):''}</b>${cu&&r.skip?'<br><span class="chip g">non aggiorna</span>':''}</td><td class="n">${cu&&old!=null?eur3(old):''}${cu&&v!=null?`<br><span class="chip ${v>0.05?'r':v<-0.05?'ok':'g'}">${v>0?'+':''}${pct(v)}</span>`:''}</td></tr>`}).join('')}
    </table></div></div>`:''}
   ${P.length?propView():''}`;
 }
+function remember(r,patch){
+  const mk=r.voce.toUpperCase(); let ex=S.mappaFatture.find(m=>m.voce.toUpperCase()===mk&&m.fornitore===r.forn);
+  if(!ex){ ex={voce:r.voce,fornitore:r.forn,ing:null,formato:null,negozio:false,updatedAt:0}; S.mappaFatture.push(ex); }
+  Object.assign(ex,patch); touch(ex);
+}
 function applyInvoice(){
-  let n=0;
-  for(const r of IMP.righe.filter(r=>r.on&&r.ing&&r.formato)){
-    const i=getI(r.ing); if(!i) continue;
+  let n=0,nn=0,nw=0;
+  // per ogni ingrediente vale una sola riga: la più recente, a parità di data il formato più grande
+  const best=new Map(); for(const r of IMP.righe.filter(r=>willApply(r)&&r.ing)){ const o=best.get(r.ing); if(!o||r.data>o.data||(r.data===o.data&&(r.formato||0)>(o.formato||0))) best.set(r.ing,r); }
+  for(const r of IMP.righe){
+    if(willApply(r)&&r.ing&&best.get(r.ing)!==r) continue;
+    if(r.dest==='negozio'&&!r.why.startsWith('ricordato')){ remember(r,{ing:null,formato:null,negozio:true}); S.importati.push(r.key); nn++; continue; }
+    if(!willApply(r)) continue;
+    let i=r.ing&&getI(r.ing);
+    if(!i){ const nome=(r.nuovo||'').trim(); if(!nome) continue; i=INAME.get(nome.toLowerCase());
+      if(!i){ i={id:uid('i-'),nome,fornitore:r.forn,prezzo:null,formato:null,unita:r.unitaNuovo||'kg',pesoPezzo:null,note:'',storico:[],updatedAt:0,deleted:false}; S.ingredienti.push(i); reindex(); nw++; } }
+    const last=lastPriceDate(i); if(last&&r.data&&r.data<last){ remember(r,{ing:i.id,formato:r.formato,negozio:false}); continue; } // fattura più vecchia: ricorda l'abbinamento ma non tocca il prezzo
     const prima=unitCost(i), nu=r.netto/r.formato;
-    const fs=r.fornitore.split(/\s+/).slice(0,2).join(' ');
-    i.storico=(i.storico||[]).concat([{data:r.data,prezzoUnit:nu,prima,fornitore:fs,fattura:r.numero,voce:r.voce}]).slice(-60);
-    i.prezzo=r.netto; i.formato=r.formato; i.fornitore=fs;
-    i.note=`Fattura ${dIT(r.data)} ${fs} n. ${r.numero}: ${r.voce} (conf. ${fmt(r.formato,3)} ${i.unita}). Ultimo prezzo pagato, IVA esclusa.${prima!=null?' Prima: '+eur3(prima)+'/'+i.unita+'.':''}`;
-    touch(i);
-    const mk=r.voce.toUpperCase(); const ex=S.mappaFatture.find(m=>m.voce.toUpperCase()===mk&&m.fornitore===fs);
-    if(ex){ ex.ing=r.ing; ex.formato=r.formato; touch(ex); } else S.mappaFatture.push({voce:r.voce,fornitore:fs,ing:r.ing,formato:r.formato,updatedAt:now()});
-    S.importati.push(r.key); n++;
+    i.storico=(i.storico||[]).concat([{data:r.data,prezzoUnit:nu,prima,fornitore:r.forn,fattura:r.numero,voce:r.voce}]).slice(-60);
+    i.prezzo=r.netto; i.formato=r.formato; i.fornitore=r.forn;
+    i.note=`Fattura ${dIT(r.data)} ${r.forn} n. ${r.numero}: ${r.voce} (conf. ${fmt(r.formato,3)} ${i.unita}). Ultimo prezzo pagato, IVA esclusa.${prima!=null?' Prima: '+eur3(prima)+'/'+i.unita+'.':''}`;
+    touch(i); remember(r,{ing:i.id,formato:r.formato,negozio:false}); S.importati.push(r.key); n++;
   }
-  // ricorda anche gli abbinamenti scelti a mano sulle righe non applicate
-  commit(); IMP.righe=IMP.righe.filter(r=>!S.importati.includes(r.key)); prepInvoice(); render(); toast(n+' prezzi aggiornati: le ricette sono già ricalcolate');
+  commit(); IMP.righe=IMP.righe.filter(r=>!S.importati.includes(r.key)); prepInvoice(); render();
+  toast(`${n} prezzi aggiornati in cucina${nw?' ('+nw+' ingredienti nuovi)':''}, ${nn} righe segnate come negozio`);
 }
 /* --- PROPOSTE della GASTRONOMIA (.docx) --- */
 const MESI=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
@@ -1041,6 +1082,11 @@ document.addEventListener('click',async e=>{
     case 'scaricaxls': toast('Preparo l\'Excel…'); return download(XLS_NAME,new Blob([await buildXlsx()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
     case 'scaricajson': return download('cucina-backup-'+new Date().toISOString().slice(0,10)+'.json',new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));
     case 'applicafatt': return applyInvoice();
+    case 'dest': { const [k,v]=arg.split(':'); const r=IMP.righe[+k]; r.dest=v; if(v==='cucina'&&r.why.startsWith('ricordato')) r.why=''; return render(); }
+    case 'restonegozio': IMP.righe.forEach(r=>{ if(r.dest[0]==='?') r.dest='negozio'; }); return render();
+    case 'fsave': { document.querySelectorAll('[data-fo]').forEach(x=>{ const f=S.fornitori.find(f=>f.id===x.dataset.fo); if(!f) return; const k=x.dataset.f; const v=k==='alias'?x.value.split(',').map(t=>t.trim()).filter(Boolean):x.value.trim(); if(JSON.stringify(f[k])!==JSON.stringify(v)){ f[k]=v; touch(f); } }); commit(); render(); return toast('Fornitori salvati'); }
+    case 'fadd': S.fornitori.push({id:uid('f-'),nome:'Nuovo fornitore',alias:[],regola:'misto',updatedAt:now(),deleted:false}); commit(); return render();
+    case 'fdel': { const f=S.fornitori.find(f=>f.id===arg); if(!confirm('Togliere "'+f.nome+'" dall\'elenco fornitori?')) return; f.deleted=true; touch(f); commit(); return render(); }
     case 'applicaprop': return applyProposte();
     case 'chiudiimp': IMP=null; return render();
     case 'etinuova': return etiWrite(getR(SEL));
@@ -1054,8 +1100,9 @@ document.addEventListener('change',e=>{
   if(t.dataset.filtsel){ FILT[t.dataset.filtsel]=t.value; return render(); }
   if(t.id==='etisel'){ const r=getR(SEL); r.etichetta=t.value; touch(r); commit(); return render(); }
   if(t.dataset.imp!==undefined){ const r=IMP.righe[+t.dataset.imp]; const f=t.dataset.f;
-    if(f==='on') r.on=t.checked; else if(f==='ing'){ r.ing=t.value||null; r.sure=true; r.why=''; r.on=!!r.ing&&!!r.formato; } else if(f==='formato'){ r.formato=num(t.value); r.on=!!r.ing&&!!r.formato; }
+    if(f==='ing'){ r.ing=t.value||null; r.sure=true; r.weak=false; r.skip=false; r.why=''; if(r.dest[0]==='?') r.dest='cucina'; } else if(f==='formato'){ r.formato=num(t.value); } else if(f==='nuovo'){ r.nuovo=t.value; return; }
     return render(); }
+  if(t.dataset.fregola!==undefined){ const raw=t.dataset.fregola; let f=fornMatch(raw); if(!f){ f={id:uid('f-'),nome:fornNome(raw),alias:[norm(raw).replace(SOC,' ').trim().split(/\s+/).slice(0,2).join(' ')],regola:'misto',updatedAt:0,deleted:false}; S.fornitori.push(f); } f.regola=t.value; touch(f); commit(); prepInvoice(); return render(); }
   if(t.dataset.prop!==undefined){ IMP.proposte[+t.dataset.prop].on=t.checked; return; }
   if(t.dataset.propdate!==undefined){ IMP.proposte[+t.dataset.propdate].data=t.value; return; }
   if(/^sim_/.test(t.id)){ const v=num(t.value);
