@@ -2,7 +2,7 @@
    Dati: repository GitHub PRIVATO (ricettario.json), copia locale CIFRATA con la password (AES-GCM 256, chiave PBKDF2-SHA256).
    Nessuna dipendenza esterna a runtime: lib/ contiene fflate (zip) ed ExcelJS (xlsx), caricate da questo stesso sito. */
 'use strict';
-const APP_VERSION='1.1.1';
+const APP_VERSION='1.2.0';
 const DEF_REPO='manfredinigio01-bit/magiostra-cucina-dati';
 const ETI_REPO='manfredinigio01-bit/etichette-magiostra-dati';
 const DATA_FILE='ricettario.json';
@@ -69,9 +69,9 @@ function sanitize(D){
     updatedAt:nn(i.updatedAt,0)||0,deleted:!!i.deleted})).filter(i=>i.nome);
   o.packaging=(Array.isArray(D.packaging)?D.packaging:[]).slice(0,300).map(p=>({id:okid(p.id,'p-'),nome:str(p.nome,120),fornitore:str(p.fornitore,80),prezzo:nn(p.prezzo,0,1e6),pezzi:nn(p.pezzi,0,1e6)||1,updatedAt:nn(p.updatedAt,0)||0,deleted:!!p.deleted})).filter(p=>p.nome);
   o.ricette=(Array.isArray(D.ricette)?D.ricette:[]).slice(0,3000).map(r=>({id:okid(r.id,'r-'),nome:str(r.nome,140).trim(),foglio:str(r.foglio,40),categoria:str(r.categoria,60),unita:str(r.unita,80),allergeni:str(r.allergeni,300),note:str(r.note,2000),
-    righe:(Array.isArray(r.righe)?r.righe:[]).slice(0,60).map(x=>({ing:x.ing&&ID_OK.test(x.ing)?x.ing:null,nome:str(x.nome,120),dose:nn(x.dose,0,10000),doseTesto:str(x.doseTesto,40),flag:str(x.flag,20)})),
+    righe:(Array.isArray(r.righe)?r.righe:[]).slice(0,60).map(x=>({ing:x.ing&&ID_OK.test(x.ing)?x.ing:null,ric:x.ric&&ID_OK.test(x.ric)?x.ric:null,nome:str(x.nome,120),dose:nn(x.dose,0,10000),doseTesto:str(x.doseTesto,40),flag:str(x.flag,20)})),
     procedimento:str(r.procedimento,20000),lotto:nn(r.lotto,0,10000),tProd:nn(r.tProd,0,100000),tCott:nn(r.tCott,0,100000),perdita:nn(r.perdita,0,.99),ricarico:nn(r.ricarico,0,100),confezione:nn(r.confezione,0,100000),
-    packaging:r.packaging&&ID_OK.test(r.packaging)?r.packaging:'',pezziPack:nn(r.pezziPack,0,1000),prezzoBanco:nn(r.prezzoBanco,0,10000),unitaBanco:str(r.unitaBanco,20),etichetta:r.etichetta&&ID_OK.test(r.etichetta)?r.etichetta:'',
+    vendita:r.vendita==='pezzo'||r.vendita==='kg'?r.vendita:(/pz|porzione/.test(String(r.unitaBanco||''))?'pezzo':'kg'),packaging:r.packaging&&ID_OK.test(r.packaging)?r.packaging:'',pezziPack:nn(r.pezziPack,0,1000),prezzoBanco:nn(r.prezzoBanco,0,10000),unitaBanco:str(r.unitaBanco,20),etichetta:r.etichetta&&ID_OK.test(r.etichetta)?r.etichetta:'',
     inProdotti:r.inProdotti!==false,updatedAt:nn(r.updatedAt,0)||0,deleted:!!r.deleted})).filter(r=>r.nome);
   o.archivio=(Array.isArray(D.archivio)?D.archivio:[]).slice(0,5000).map(a=>({id:okid(a.id,'a-'),nome:str(a.nome,200),tipo:a.tipo==='dolce'?'dolce':'salato',categoria:str(a.categoria,60),stagioni:(Array.isArray(a.stagioni)?a.stagioni:[]).filter(s=>['primavera','estate','autunno','inverno'].includes(s)),
     mesi:str(a.mesi,120),ultimoPrezzo:nn(a.ultimoPrezzo,0,10000),unita:str(a.unita,20),volte:nn(a.volte,0,100000)||0,prima:str(a.prima,20),ultima:str(a.ultima,20),materiaPrima:str(a.materiaPrima,120),ricetta:a.ricetta&&ID_OK.test(a.ricetta)?a.ricetta:'',updatedAt:nn(a.updatedAt,0)||0,deleted:!!a.deleted})).filter(a=>a.nome);
@@ -111,27 +111,43 @@ function usedIn(id){ return ricette().filter(r=>r.righe.some(x=>x.ing===id)); }
 
 /* ===================== FOOD COST (identico al file Excel v10) ===================== */
 function orarioFissi(P){ const h=P.settimaneMese*P.giorniSettimana*P.oreGiorno; return h>0?(P.affittoMese+P.altriFissiMese)/h:0; }
+// costo €/kg di una ricetta usata come base dentro un'altra (costo pieno se completo, altrimenti solo ingredienti)
+function baseCost(id,stack){
+  const b=getR(id); if(!b||b.deleted||stack.has(id)) return {u:null,b};
+  const c=calc(b,{stack:new Set([...stack,id])});
+  if(c.ckg!=null) return {u:c.ckg,b,full:true};
+  const kgFin=c.peso*(1-(b.perdita||0));
+  return {u:kgFin>0&&!c.manc?c.costo/kgFin:null,b,full:false};
+}
 function calc(r,opt={}){
   const P=S.parametri; let peso=0,costo=0,manc=0,righe=[],conDose=0;
+  const stack=opt.stack||new Set([r.id]);
   for(const x of r.righe){
-    const i=x.ing?getI(x.ing):null, u=unitCost(i);
+    let i=null,u=null,base=null;
+    if(x.ric){ const bc=baseCost(x.ric,stack); base=bc; u=bc.u; }
+    else { i=x.ing?getI(x.ing):null; u=unitCost(i); }
     const has=!!x.nome&&x.dose!=null;
     if(has){ conDose++; peso+=x.dose*(i&&i.unita==='pz'?(i.pesoPezzo||0):1); if(u==null) manc++; else costo+=x.dose*u; }
-    righe.push({x,i,u,costo:has&&u!=null?x.dose*u:null});
+    righe.push({x,i,u,base,costo:has&&u!=null?x.dose*u:null});
   }
-  const lotto=r.lotto||0, per=r.perdita||0;
-  let molt=opt.molt!=null&&opt.molt>0?opt.molt:1;
-  if(opt.kgVoluti>0&&peso>0) molt=opt.kgVoluti/(peso*(1-per));
-  const crudo=peso*lotto, fin=crudo*(1-per), cIng=costo*lotto;
-  const man=(r.tProd||0)/60*P.costoOrario, en=(r.tCott||0)/60*P.energiaOra;
-  const aff=((r.tProd||0)+(r.tCott||0))/60*orarioFissi(P)*P.quotaAffitto;
+  const per=r.perdita||0;
+  // dosi prodotte: lotto standard, oppure quelle scelte nella ricetta (moltiplicatore / kg finali)
+  let dosi=r.lotto||0;
+  if(opt.dosi>0) dosi=opt.dosi;
+  if(opt.kgVoluti>0&&peso>0) dosi=opt.kgVoluti/(peso*(1-per));
+  const tP=opt.tProd!=null?opt.tProd:(r.tProd||0), tC=opt.tCott!=null?opt.tCott:(r.tCott||0);
+  const molt=opt.dosi>0||opt.kgVoluti>0?dosi:(opt.molt>0?opt.molt:1);
+  const crudo=peso*dosi, fin=crudo*(1-per), cIng=costo*dosi;
+  const man=tP/60*P.costoOrario, en=tC/60*P.energiaOra;
+  const aff=(tP+tC)/60*orarioFissi(P)*P.quotaAffitto;
   const tot=cIng+man+en+aff;
   const ckg=fin>0?tot/fin:null;
   const ric=r.ricarico!=null?r.ricarico:P.ricaricoDef;
   const pkg=ckg!=null?ckg*(1+ric)*(1+P.iva):null;
   const pk=S.packaging.find(p=>p.id===r.packaging&&!p.deleted);
   const pcost=pk?(pk.prezzo||0)/(pk.pezzi||1)*(r.pezziPack||1):P.packagingDef;
-  const conf=ckg!=null&&(r.confezione||0)>0?ckg*r.confezione/1000+pcost:null;
+  const aPezzo=r.vendita==='pezzo';
+  const conf=aPezzo&&ckg!=null&&(r.confezione||0)>0?ckg*r.confezione/1000+pcost:null;
   const pconf=conf!=null?conf*(1+ric)*(1+P.iva):null;
   const marg=pconf!=null?pconf/(1+P.iva)-conf:null;
   let stato;
@@ -143,7 +159,7 @@ function calc(r,opt={}){
   // ricarico reale al banco (prezzo €/etto o €/kg, IVA inclusa) sul costo pieno €/kg
   let ricReale=null; const pb=r.prezzoBanco;
   if(pb!=null&&ckg){ const perKg=/etto/i.test(r.unitaBanco)?pb*10:/kg/i.test(r.unitaBanco)?pb:null; if(perKg!=null) ricReale=perKg/(1+P.iva)/ckg-1; }
-  return {righe,peso,costo,manc,molt,crudo,fin,cIng,man,en,aff,tot,ckg,ric,pkg,pcost,conf,pconf,marg,stato,ricReale,pesoIng:tot>0?cIng/tot:null,pesoMan:tot>0?man/tot:null};
+  return {righe,peso,costo,manc,molt,dosi,tP,tC,crudo,fin,cIng,man,en,aff,tot,ckg,ric,pkg,pcost,conf,pconf,marg,stato,ricReale,aPezzo,pesoIng:tot>0?cIng/tot:null,pesoMan:tot>0?man/tot:null};
 }
 const STATO_CL={'OK':'ok','Tempi mancanti':'w','Prezzi mancanti':'w','Dosi mancanti':'w','Lotto mancante':'w','Ricetta da inserire':'r'};
 
@@ -287,7 +303,10 @@ function render(){
   const m=$('#main');
   const f={quadro:vQuadro,ricette:vRicette,ingredienti:vIngredienti,archivio:vArchivio,fatture:vFatture,impostazioni:vImpostazioni}[TAB];
   if(render.busy) return; render.busy=true;
-  try{ const ae=document.activeElement; if(ae&&m.contains(ae)&&ae.id!=='q') ae.blur(); const y=scrollY; m.innerHTML=f(); scrollTo(0,y); }
+  try{ const ae=document.activeElement; if(ae&&m.contains(ae)&&ae.id!=='q') ae.blur(); const y=scrollY;
+    const keep=render.newTab?[]:[...m.querySelectorAll('.list,.scroll')].map(e=>[e.scrollTop,e.scrollLeft]); render.newTab=false; // le liste restano dove eri
+    m.innerHTML=f(); scrollTo(0,y);
+    m.querySelectorAll('.list,.scroll').forEach((e,k)=>{ if(keep[k]){ e.scrollTop=keep[k][0]; e.scrollLeft=keep[k][1]; } }); }
   finally{ render.busy=false; }
   afterRender();
 }
@@ -348,6 +367,7 @@ function vQuadro(){
 }
 
 /* ===================== RICETTE ===================== */
+const BASE='Base: ';
 const CATS=()=>[...new Set(ricette().map(r=>r.categoria).filter(Boolean))].sort();
 function vRicette(){
   const f=FILT.ric||'';
@@ -366,43 +386,55 @@ function vRicette(){
     <p class="small mut">${R.length} ricette</p>
   </div><div>${sel?(EDIT&&EDIT.id===sel.id?ricEdit():ricView(sel)):'<div class="card"><p class="mut">Scegli una ricetta dall\'elenco.</p></div>'}</div></div>`;
 }
-let MOLT={m:1,kg:null};
+let MOLT={d:null,kg:null,tp:null,tc:null}; // simulazione nella scheda: dosi, kg finali, minuti (non salvati)
+const qty=(q,un)=>q==null?'':un==='pz'?fmt(q,1)+' pz':q>=1?fmt(q,2)+(un==='l'?' l':' kg'):fmt(q*1000,0)+(un==='l'?' ml':' g');
+const perEtto=v=>v==null?null:v/10;
 function ricView(r){
-  const c=calc(r,{molt:MOLT.m,kgVoluti:MOLT.kg});
+  const sim=MOLT.d!=null||MOLT.kg!=null||MOLT.tp!=null||MOLT.tc!=null;
+  const c=calc(r,{dosi:MOLT.d,kgVoluti:MOLT.kg,tProd:MOLT.tp,tCott:MOLT.tc});
+  const st=calc(r); // lotto standard, per confronto
   const P=S.parametri, pk=S.packaging.find(p=>p.id===r.packaging);
   const et=ETI&&r.etichetta?ETI.prodotti.find(p=>p.id===r.etichetta&&!p.deleted):null;
   return `<div class="card">
     <div class="row"><h2 class="flex1" style="margin:0">${esc(r.nome)}</h2><span class="chip ${STATO_CL[c.stato]}">${esc(c.stato)}</span></div>
-    <p class="mut small">${esc(r.categoria)}${r.unita?' · '+esc(r.unita):''}${r.foglio?' · scheda Excel: '+esc(r.foglio):''}</p>
+    <p class="mut small">${esc(r.categoria)}${r.unita?' · '+esc(r.unita):''} · venduto ${r.vendita==='pezzo'?'al kg e a pezzo ('+(fmt(r.confezione,0)||'?')+' g)':'al kg'}${r.foglio?' · scheda Excel: '+esc(r.foglio):''}</p>
     ${r.note?`<p class="small">${esc(r.note)}</p>`:''}
     <div class="row" style="margin:8px 0 12px"><button class="b p" data-act="modric">Modifica</button><button class="b" data-act="stampa:cucina">Stampa per la cucina</button><button class="b" data-act="stampa:fc">Stampa food cost</button><button class="b" data-act="duplica">Duplica</button><button class="b d" data-act="eliminaric">Elimina</button></div>
-    <h3>Ricetta</h3>
-    <div class="row small"><label class="f s">Moltiplicatore dosi<input class="i n" id="molt" value="${fmt(MOLT.kg?c.molt:MOLT.m,3)}" inputmode="decimal"></label><label class="f s">oppure kg finali voluti<input class="i n" id="kgv" value="${MOLT.kg?fmt(MOLT.kg,2):''}" inputmode="decimal"></label><span class="mut">${MOLT.kg?'moltiplicatore calcolato dai kg voluti: '+fmt(c.molt,3):''}</span></div>
-    <div class="scroll"><table class="t" style="margin-top:8px"><tr><th>Ingrediente</th><th class="n">1 dose</th><th class="n">Da usare</th><th class="n">€/unità</th><th class="n">Costo 1 dose</th><th>Fornitore</th></tr>
-    ${c.righe.filter(z=>z.x.nome).map(({x,i,u,costo})=>{ const un=i?i.unita:''; const q=x.dose!=null?x.dose*c.molt:null; return `<tr><td>${esc(x.nome)}${x.flag?' <span class="chip w">da verificare</span>':''}${!i?' <span class="chip r">non in elenco</span>':''}</td><td class="n">${x.dose!=null?fmt(x.dose)+' '+esc(un):esc(x.doseTesto||'–')}</td><td class="n"><b>${q!=null?(un==='pz'?fmt(q,1)+' pz':fmt(q*1000,0)+(un==='l'?' ml':' g')):''}</b></td><td class="n">${u!=null?eur3(u):'<span class="chip r">manca</span>'}</td><td class="n">${costo!=null?eur(costo):''}</td><td class="small mut">${esc(i?i.fornitore:'')}</td></tr>`}).join('')}
-    <tr class="tot"><td>Peso impasto crudo · costo ingredienti (1 dose)</td><td class="n">${fmt(c.peso)} kg</td><td class="n">${fmt(c.peso*c.molt)} kg</td><td></td><td class="n">${eur(c.costo)}</td><td class="small">${c.manc?`<span class="chip r">${c.manc} prezzi mancanti</span>`:''}</td></tr></table></div>
+    <h3>Produzione</h3>
+    <div class="row small">
+      <label class="f s">Dosi da produrre<input class="i n" id="sim_d" inputmode="decimal" value="${fmt(c.dosi,3)}"></label>
+      <label class="f s">oppure kg finali voluti<input class="i n" id="sim_kg" inputmode="decimal" value="${MOLT.kg?fmt(MOLT.kg,2):''}" placeholder="${fmt(c.fin,2)}"></label>
+      <label class="f s">Minuti di lavoro<input class="i n" id="sim_tp" inputmode="decimal" value="${fmt(c.tP,0)}"></label>
+      <label class="f s">Minuti di cottura<input class="i n" id="sim_tc" inputmode="decimal" value="${fmt(c.tC,0)}"></label>
+      ${sim?'<button class="b sm" data-act="simreset">Torna al lotto standard</button><button class="b sm" data-act="simsalva">Salva come lotto standard</button>':''}
+    </div>
+    <p class="small mut">Lotto standard: ${fmt(r.lotto)||'–'} dosi, ${fmt(r.tProd)||0} min di lavoro, ${fmt(r.tCott)||0} min di cottura. Se cambi le dosi i minuti restano quelli del lotto standard: correggili qui se una produzione più grande richiede più tempo.</p>
+    <div class="scroll"><table class="t" style="margin-top:8px"><tr><th>Ingrediente</th><th class="n">1 dose</th><th class="n">Da usare (${fmt(c.dosi,2)} dosi)</th><th class="n">€/unità</th><th class="n">Costo</th><th>Fornitore</th></tr>
+    ${c.righe.filter(z=>z.x.nome).map(({x,i,u,base})=>{ const un=base?'kg':i?i.unita:''; const q=x.dose!=null?x.dose*c.dosi:null; return `<tr><td>${base?'<span class="chip g">base</span> ':''}${esc(x.nome)}${x.flag?' <span class="chip w">da verificare</span>':''}${!i&&!base?' <span class="chip r">non in elenco</span>':''}${base&&base.u!=null&&!base.full?' <span class="chip w">solo ingredienti</span>':''}</td><td class="n">${x.dose!=null?fmt(x.dose)+' '+esc(un):esc(x.doseTesto||'–')}</td><td class="n"><b>${qty(q,un)}</b></td><td class="n">${u!=null?eur3(u):'<span class="chip r">manca</span>'}</td><td class="n">${x.dose!=null&&u!=null?eur(x.dose*u*c.dosi):''}</td><td class="small mut">${esc(base?'ricetta base':i?i.fornitore:'')}</td></tr>`}).join('')}
+    <tr class="tot"><td>Impasto crudo · ingredienti</td><td class="n">${fmt(c.peso)} kg</td><td class="n">${qty(c.crudo,'kg')}</td><td></td><td class="n">${eur(c.cIng)}</td><td class="small">${c.manc?`<span class="chip r">${c.manc} prezzi mancanti</span>`:''}</td></tr></table></div>
     ${r.procedimento?`<h3>Procedimento</h3><div class="proc">${esc(r.procedimento)}</div>`:''}
-    <h3>Food cost (lotto standard: ${fmt(r.lotto)||'–'} dosi)</h3>
+    <h3>Food cost per ${fmt(c.dosi,2)} dosi${sim?' <span class="chip w">simulazione</span>':''}</h3>
     <div class="fc">
-      <div><span>Costo di produzione</span><b>${eur(c.ckg)}/kg</b></div>
-      <div><span>Prezzo teorico (ricarico ${pct(c.ric)} + IVA)</span><b>${eur(c.pkg)}/kg</b></div>
-      <div><span>Confezione ${r.confezione?fmt(r.confezione,0)+' g':'–'}</span><b>${eur(c.pconf)}</b></div>
-      <div><span>Margine a confezione</span><b>${eur(c.marg)}</b></div>
-      <div><span>Prezzo al banco</span><b>${esc(banco(r))}</b></div>
-      <div><span>Ricarico reale al banco</span><b>${pct(c.ricReale)}</b></div>
+      <div><span>Costo di produzione</span><b>${eur(c.ckg)}/kg</b>${sim&&st.ckg!=null&&c.ckg!=null?`<span>lotto standard: ${eur(st.ckg)}/kg</span>`:''}</div>
+      <div><span>Prezzo al kg (ricarico ${pct(c.ric)} + IVA)</span><b>${eur(c.pkg)}/kg</b><span>= ${eur(perEtto(c.pkg))} all'etto</span></div>
+      ${c.aPezzo?`<div><span>Pezzo da ${fmt(r.confezione,0)||'?'} g (con packaging)</span><b>${eur(c.pconf)}</b><span>margine ${eur(c.marg)}</span></div>`:''}
+      <div><span>Prezzo al banco</span><b>${esc(banco(r))}</b><span>ricarico reale ${pct(c.ricReale)}</span></div>
+      <div><span>Costo totale della produzione</span><b>${eur(c.tot)}</b><span>${fmt(c.fin,2)} kg finali</span></div>
     </div>
     <div class="scroll"><table class="t" style="margin-top:10px">
-      <tr><td>Peso crudo del lotto</td><td class="n">${fmt(c.crudo)} kg</td><td>Perdita in cottura</td><td class="n">${pct(r.perdita||0)}</td></tr>
-      <tr><td>Peso finale del lotto</td><td class="n">${fmt(c.fin)} kg</td><td>Tempo produzione / cottura</td><td class="n">${fmt(r.tProd)||0} / ${fmt(r.tCott)||0} min</td></tr>
-      <tr><td>Ingredienti del lotto</td><td class="n">${eur(c.cIng)}</td><td>Manodopera (${eur(P.costoOrario)}/h)</td><td class="n">${eur(c.man)}</td></tr>
+      <tr><td>Peso crudo</td><td class="n">${fmt(c.crudo)} kg</td><td>Perdita in cottura</td><td class="n">${pct(r.perdita||0)}</td></tr>
+      <tr><td>Peso finale</td><td class="n">${fmt(c.fin)} kg</td><td>Minuti lavoro / cottura</td><td class="n">${fmt(c.tP,0)} / ${fmt(c.tC,0)}</td></tr>
+      <tr><td>Ingredienti</td><td class="n">${eur(c.cIng)}</td><td>Manodopera (${eur(P.costoOrario)}/h)</td><td class="n">${eur(c.man)}</td></tr>
       <tr><td>Energia (${eur(P.energiaOra)}/h)</td><td class="n">${eur(c.en)}</td><td>Affitto e costi fissi cucina</td><td class="n">${eur(c.aff)}</td></tr>
-      <tr class="tot"><td>Costo totale del lotto</td><td class="n">${eur(c.tot)}</td><td>Packaging a confezione</td><td class="n">${eur(c.pcost)} ${pk?'('+esc(pk.nome)+')':'(predefinito)'}</td></tr>
+      <tr class="tot"><td>Costo totale</td><td class="n">${eur(c.tot)}</td><td>${c.aPezzo?'Packaging a pezzo':''}</td><td class="n">${c.aPezzo?eur(c.pcost)+' '+(pk?'('+esc(pk.nome)+')':'(predefinito)'):''}</td></tr>
       <tr><td>Peso ingredienti sul costo</td><td class="n">${pct(c.pesoIng)}</td><td>Peso manodopera sul costo</td><td class="n">${pct(c.pesoMan)}</td></tr>
     </table></div>
+    ${usedAsBase(r.id).length?`<p class="small">Usata come base in: ${usedAsBase(r.id).map(x=>esc(x.nome)).join(', ')}</p>`:''}
     <h3>Etichetta</h3>
     ${etiBox(r,et,c)}
   </div>`;
 }
+const usedAsBase=id=>ricette().filter(r=>r.righe.some(x=>x.ric===id));
 function etiBox(r,et,c){
   if(!ETI) return '<p class="mut small">Archivio etichette non raggiungibile (serve la rete, e la chiave deve avere accesso anche a etichette-magiostra-dati).</p>';
   const opts=ETI.prodotti.filter(p=>!p.deleted).sort((a,b)=>a.nome.localeCompare(b.nome,'it'));
@@ -416,13 +448,14 @@ function etiBox(r,et,c){
 }
 function ricEdit(){
   const r=EDIT; const names=ings().map(i=>i.nome);
+  const basi=ricette().filter(b=>b.id!==r.id).sort((a,b)=>(a.categoria==='Basi e salse'?0:1)-(b.categoria==='Basi e salse'?0:1)||a.nome.localeCompare(b.nome,'it')).map(b=>BASE+b.nome);
   return `<div class="card"><h2>${r._new?'Nuova ricetta':'Modifica: '+esc(r.nome)}</h2>
    <div class="row"><label class="f">Nome<input class="i" data-e="nome" value="${esc(r.nome)}"></label><label class="f">Categoria<input class="i" data-e="categoria" value="${esc(r.categoria)}" list="catlist"></label><label class="f">Unità / resa<input class="i" data-e="unita" value="${esc(r.unita)}"></label></div>
    <datalist id="catlist">${CATS().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
-   <datalist id="inglist">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
-   <h3>Ingredienti per 1 dose (kg, litri o pezzi, come nell'elenco ingredienti)</h3>
+   <datalist id="inglist">${names.map(n=>`<option value="${esc(n)}">`).join('')}${basi.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
+   <h3>Ingredienti per 1 dose (kg, litri o pezzi, come nell'elenco ingredienti)</h3><p class="small mut">Per usare una vostra preparazione (panna, besciamella, frolla…) scegli dall'elenco la voce che inizia con <b>${esc(BASE)}</b> e scrivi la dose in kg: il costo viene preso dal food cost di quella ricetta.</p>
    <div class="scroll"><table class="t"><tr><th>Ingrediente</th><th class="n">Dose</th><th>Unità</th><th></th></tr>
-   ${r.righe.map((x,k)=>{ const i=INAME.get((x.nome||'').toLowerCase()); return `<tr><td><input class="i" list="inglist" data-row="${k}" data-f="nome" value="${esc(x.nome)}">${x.nome&&!i?'<div class="small" style="color:var(--r)">Non è nell\'elenco ingredienti: aggiungilo in "Ingredienti e prezzi" o scegli un nome dall\'elenco.</div>':''}</td><td class="n"><input class="i n" inputmode="decimal" data-row="${k}" data-f="dose" value="${x.dose!=null?fmt(x.dose,4):esc(x.doseTesto)}"></td><td class="mut">${i?esc(i.unita):''}</td><td><button class="b sm d" data-act="delriga:${k}">✕</button></td></tr>`}).join('')}
+   ${r.righe.map((x,k)=>{ const i=x.ric?{unita:'kg'}:INAME.get((x.nome||'').toLowerCase()); return `<tr><td><input class="i" list="inglist" data-row="${k}" data-f="nome" value="${esc((x.ric?BASE:'')+x.nome)}">${x.nome&&!i?'<div class="small" style="color:var(--r)">Non è nell\'elenco ingredienti: aggiungilo in "Ingredienti e prezzi" o scegli un nome dall\'elenco.</div>':''}</td><td class="n"><input class="i n" inputmode="decimal" data-row="${k}" data-f="dose" value="${x.dose!=null?fmt(x.dose,4):esc(x.doseTesto)}"></td><td class="mut">${i?esc(i.unita):''}</td><td><button class="b sm d" data-act="delriga:${k}">✕</button></td></tr>`}).join('')}
    </table></div>
    <div class="row" style="margin-top:6px"><button class="b sm" data-act="addriga">+ Ingrediente</button></div>
    <h3>Procedimento</h3><textarea class="i" data-e="procedimento">${esc(r.procedimento)}</textarea>
@@ -433,7 +466,7 @@ function ricEdit(){
     <label class="f s">Tempo cottura (min)<input class="i" inputmode="decimal" data-n="tCott" value="${fmt(r.tCott)}"></label>
     <label class="f s">Perdita in cottura %<input class="i" inputmode="decimal" data-p="perdita" value="${r.perdita!=null?fmt(r.perdita*100,1):''}"></label>
     <label class="f s">Ricarico % (vuoto = ${pct(S.parametri.ricaricoDef)})<input class="i" inputmode="decimal" data-p="ricarico" value="${r.ricarico!=null?fmt(r.ricarico*100,1):''}"></label>
-    <label class="f s">Confezione (g)<input class="i" inputmode="decimal" data-n="confezione" value="${fmt(r.confezione)}"></label>
+    <label class="f">Come lo vendi<select class="i" data-e="vendita"><option value="kg" ${r.vendita!=='pezzo'?'selected':''}>Solo al kg (prezzo al kg e all'etto)</option><option value="pezzo" ${r.vendita==='pezzo'?'selected':''}>Al kg e anche a pezzo / confezione</option></select></label><label class="f s">Pezzatura (g)<input class="i" inputmode="decimal" data-n="confezione" value="${fmt(r.confezione)}"></label>
     <label class="f">Packaging<select class="i" data-e="packaging"><option value="">predefinito (${eur(S.parametri.packagingDef)})</option>${packs().map(p=>`<option value="${p.id}" ${p.id===r.packaging?'selected':''}>${esc(p.nome)}</option>`).join('')}</select></label>
     <label class="f s">Pezzi packaging<input class="i" inputmode="decimal" data-n="pezziPack" value="${fmt(r.pezziPack)}"></label>
     <label class="f s">Prezzo al banco €<input class="i" inputmode="decimal" data-n="prezzoBanco" value="${fmt(r.prezzoBanco,2)}"></label>
@@ -601,9 +634,9 @@ async function buildXlsx(){
   [34,16,14,14,14].forEach((w,k)=>wsK.getColumn(k+1).width=w);
   // Schede ricetta
   const IR=`Ingredienti!$A$5:$A$${4+NI}`, col=c=>`Ingredienti!$${c}$5:$${c}$${4+NI}`;
-  const refs=[];
+  const refs=[]; const SN=new Map(R.map(r=>[r.id,sheetName(r.nome,used)]));
   for(const r of R){
-    const c=calc(r); const name=sheetName(r.nome,used); refs.push([r,name,c]);
+    const c=calc(r); const name=SN.get(r.id); refs.push([r,name,c]);
     const ws=wb.addWorksheet(name);
     ws.getCell('A1').value=r.nome; ws.getCell('A1').font=T;
     ws.getCell('H1').value={text:'← Prodotti',hyperlink:"#'Prodotti'!A1"};
@@ -617,14 +650,16 @@ async function buildXlsx(){
     for(let k=0;k<20;k++){
       const rr=10+k, x=rows[k]; ws.getCell('A'+rr).value=k+1;
       if(x){ ws.getCell('B'+rr).value=x.nome; ws.getCell('D'+rr).value=x.dose!=null?x.dose:(x.doseTesto||null); }
+      const bs=x&&x.ric?SN.get(x.ric):null;
       ws.getCell('B'+rr).fill=Y; ws.getCell('D'+rr).fill=Y;
       const z=x?c.righe.find(q=>q.x===x):null;
-      ws.getCell('C'+rr).value={formula:`IF(B${rr}="","",IFERROR(INDEX(${col('E')},MATCH(B${rr},${IR},0)),"?"))`,result:z&&z.i?z.i.unita:''};
+      ws.getCell('C'+rr).value=bs?'kg':{formula:`IF(B${rr}="","",IFERROR(INDEX(${col('E')},MATCH(B${rr},${IR},0)),"?"))`,result:z&&z.i?z.i.unita:''};
       ws.getCell('E'+rr).value={formula:`IF(OR(B${rr}="",D${rr}=""),"",D${rr}*$D$7)`,result:x&&x.dose!=null?x.dose:''};
       ws.getCell('F'+rr).value={formula:`IF(E${rr}="","",IF(C${rr}="pz",E${rr},E${rr}*1000))`,result:''};
-      ws.getCell('G'+rr).value={formula:`IF(B${rr}="","",IFERROR(INDEX(${col('F')},MATCH(B${rr},${IR},0)),""))`,result:z&&z.u!=null?z.u:''};
+      if(bs){ const q=qs(bs); ws.getCell('G'+rr).value={formula:`IF(ISNUMBER(${q}!D61),${q}!D61,IFERROR(IF(${q}!L30>0,"",${q}!H30/(${q}!D30*(1-N(${q}!D53)))),""))`,result:z&&z.u!=null?z.u:''}; }
+      else ws.getCell('G'+rr).value={formula:`IF(B${rr}="","",IFERROR(INDEX(${col('F')},MATCH(B${rr},${IR},0)),""))`,result:z&&z.u!=null?z.u:''};
       ws.getCell('H'+rr).value={formula:`IF(OR(B${rr}="",D${rr}="",G${rr}=""),"",D${rr}*G${rr})`,result:z&&z.costo!=null?z.costo:''};
-      ws.getCell('I'+rr).value={formula:`IF(B${rr}="","",IFERROR(INDEX(${col('B')},MATCH(B${rr},${IR},0))&"",""))`,result:z&&z.i?z.i.fornitore:''};
+      ws.getCell('I'+rr).value=bs?{text:'ricetta base →',hyperlink:`#${qs(bs)}!A1`}:{formula:`IF(B${rr}="","",IFERROR(INDEX(${col('B')},MATCH(B${rr},${IR},0))&"",""))`,result:z&&z.i?z.i.fornitore:''};
       ws.getCell('K'+rr).value={formula:`IF(OR(B${rr}="",D${rr}=""),0,D${rr}*IF(C${rr}="pz",IFERROR(INDEX(${col('G')},MATCH(B${rr},${IR},0)),0),1))`,result:0};
       ws.getCell('L'+rr).value={formula:`IF(AND(B${rr}<>"",D${rr}<>"",G${rr}=""),1,0)`,result:0};
     }
@@ -645,7 +680,8 @@ async function buildXlsx(){
     set(62,'Peso ingredienti sul costo totale',{formula:'IF(D60>0,D56/D60,"")',result:c.pesoIng??''}); set(63,'Peso manodopera sul costo totale',{formula:'IF(D60>0,D57/D60,"")',result:c.pesoMan??''});
     set(64,'Ricarico',r.ricarico,1); set(65,'Ricarico applicato',{formula:'IF(ISNUMBER(D64),D64,Parametri!$B$14)',result:c.ric});
     set(66,'Prezzo di vendita €/kg (IVA incl.)',{formula:'IF(ISNUMBER(D61),D61*(1+D65)*(1+Parametri!$B$13),"")',result:c.pkg??''});
-    set(67,'Confezione standard (g)',r.confezione,1);
+    ws.getCell('E66').value={formula:'IF(ISNUMBER(D66),D66/10,"")',result:c.pkg!=null?c.pkg/10:''}; ws.getCell('F66').value='€/etto'; ws.getCell('E66').numFmt='#,##0.00 €';
+    set(67,'Pezzatura (g) — vuoto = venduto solo al kg',r.vendita==='pezzo'?r.confezione:null,1);
     const pk=K.find(p=>p.id===r.packaging); set(68,'Packaging usato',pk?pk.nome:null,1); ws.getCell('E68').value=r.pezziPack; ws.getCell('E68').fill=Y;
     ws.getCell('F68').value={formula:'IF(D68="",Parametri!$B$15,IFERROR(INDEX(Packaging!$E$4:$E$28,MATCH(D68,Packaging!$A$4:$A$28,0))*IF(ISNUMBER(E68),E68,1),Parametri!$B$15))',result:c.pcost};
     set(69,'Costo pieno della confezione',{formula:'IF(AND(ISNUMBER(D61),N(D67)>0),D61*D67/1000+F68,"")',result:c.conf??''});
@@ -658,20 +694,21 @@ async function buildXlsx(){
   // Prodotti
   wsP.getCell('A1').value='La Magiostra — Cucina: prodotti, ricettario e food cost'; wsP.getCell('A1').font=T;
   wsP.getCell('A2').value='Generato dall\'app Cucina il '+new Date().toLocaleString('it-IT')+'. Clicca il nome per aprire la scheda. Per modificare usa l\'app: questo file viene riscritto.';
-  wsP.getRow(4).values=['#','Prodotto','Categoria','Stato','Costo produzione €/kg','Ricarico','Prezzo teorico €/kg (IVA incl.)','Confezione (g)','Prezzo confezione','Margine a confezione','Prezzo al banco','Unità','Ricarico reale al banco']; hdr(wsP.getRow(4));
+  wsP.getRow(4).values=['#','Prodotto','Categoria','Stato','Costo produzione €/kg','Ricarico','Prezzo €/kg (IVA incl.)','Pezzatura (g)','Prezzo a pezzo','Margine a pezzo','Prezzo al banco','Unità','Ricarico reale al banco','Prezzo €/etto (IVA incl.)']; hdr(wsP.getRow(4));
   refs.forEach(([r,name,c],k)=>{ const row=5+k, q=qs(name);
     wsP.getCell('A'+row).value=k+1;
     wsP.getCell('B'+row).value={text:r.nome,hyperlink:`#${q}!A1`}; wsP.getCell('B'+row).font={color:{argb:'FF7C3A20'},underline:true};
     wsP.getCell('C'+row).value=r.categoria; wsP.getCell('D'+row).value=c.stato;
     wsP.getCell('E'+row).value={formula:`${q}!D61`,result:c.ckg??''}; wsP.getCell('F'+row).value={formula:`${q}!D65`,result:c.ric};
-    wsP.getCell('G'+row).value={formula:`${q}!D66`,result:c.pkg??''}; wsP.getCell('H'+row).value={formula:`IF(N(${q}!D67)>0,${q}!D67,"")`,result:r.confezione||''};
+    wsP.getCell('G'+row).value={formula:`${q}!D66`,result:c.pkg??''}; wsP.getCell('H'+row).value={formula:`IF(N(${q}!D67)>0,${q}!D67,"")`,result:r.vendita==='pezzo'&&r.confezione?r.confezione:''};
     wsP.getCell('I'+row).value={formula:`${q}!D70`,result:c.pconf??''}; wsP.getCell('J'+row).value={formula:`${q}!D71`,result:c.marg??''};
     wsP.getCell('K'+row).value=r.prezzoBanco; wsP.getCell('L'+row).value=r.unitaBanco||null;
     wsP.getCell('M'+row).value={formula:`IF(AND(ISNUMBER(K${row}),L${row}="€/etto",ISNUMBER(E${row})),K${row}*10/(1+Parametri!$B$13)/E${row}-1,IF(AND(ISNUMBER(K${row}),L${row}="€/kg",ISNUMBER(E${row})),K${row}/(1+Parametri!$B$13)/E${row}-1,""))`,result:c.ricReale??''};
+    wsP.getCell('N'+row).value={formula:`IF(ISNUMBER(G${row}),G${row}/10,"")`,result:c.pkg!=null?c.pkg/10:''};
     if(c.stato!=='OK') wsP.getCell('D'+row).font={color:{argb:'FFA86B00'}};
   });
-  [5,36,16,18,14,10,16,12,14,14,12,10,14].forEach((w,k)=>wsP.getColumn(k+1).width=w);
-  ['E','G','I','J','K'].forEach(c=>wsP.getColumn(c).numFmt='#,##0.00 €'); ['F','M'].forEach(c=>wsP.getColumn(c).numFmt='0%');
+  [5,36,16,18,14,10,16,12,14,14,12,10,14,14].forEach((w,k)=>wsP.getColumn(k+1).width=w);
+  ['E','G','I','J','K','N'].forEach(c=>wsP.getColumn(c).numFmt='#,##0.00 €'); ['F','M'].forEach(c=>wsP.getColumn(c).numFmt='0%');
   // Archivio piatti
   const wsR=wb.addWorksheet('Archivio piatti',{views:[{state:'frozen',ySplit:1}]});
   wsR.getRow(1).values=['Piatto','Tipo','Categoria','Primavera','Estate','Autunno','Inverno','Mesi','Ultimo prezzo','Unità','Volte','Prima volta','Ultima volta','Materia prima']; hdr(wsR.getRow(1));
@@ -907,16 +944,16 @@ function printHTML(html){ $('#print').innerHTML=html; window.print(); }
 const pHead=t=>`<div class="head"><b>La Magiostra · Cucina</b><span>${esc(t)} · ${new Date().toLocaleDateString('it-IT')}</span></div>`;
 function stampa(tipo){
   if(tipo==='cucina'||tipo==='fc'){
-    const r=getR(SEL); if(!r) return; const c=calc(r,{molt:MOLT.m,kgVoluti:MOLT.kg});
-    let h=pHead(tipo==='cucina'?'Scheda di produzione':'Food cost')+`<h1>${esc(r.nome)}</h1><p>${esc(r.categoria)}${r.unita?' · '+esc(r.unita):''}${c.molt!==1?' · <b>dosi × '+fmt(c.molt,3)+'</b>':''}</p>`;
-    h+=`<table><tr><th>Ingrediente</th><th class="n">Quantità</th>${tipo==='fc'?'<th class="n">€/unità</th><th class="n">Costo 1 dose</th>':''}</tr>${c.righe.filter(z=>z.x.nome).map(({x,i,u,costo})=>{ const un=i?i.unita:''; const q=x.dose!=null?x.dose*c.molt:null; return `<tr><td>${esc(x.nome)}</td><td class="n"><b>${q!=null?(un==='pz'?fmt(q,1)+' pz':fmt(q*1000,0)+(un==='l'?' ml':' g')):esc(x.doseTesto||'q.b.')}</b></td>${tipo==='fc'?`<td class="n">${u!=null?eur3(u):'manca'}</td><td class="n">${costo!=null?eur(costo):''}</td>`:''}</tr>`}).join('')}
-    <tr><td><b>Totale impasto crudo</b></td><td class="n"><b>${fmt(c.peso*c.molt)} kg</b></td>${tipo==='fc'?`<td></td><td class="n"><b>${eur(c.costo)}</b></td>`:''}</tr></table>`;
+    const r=getR(SEL); if(!r) return; const c=calc(r,{dosi:MOLT.d,kgVoluti:MOLT.kg,tProd:MOLT.tp,tCott:MOLT.tc});
+    let h=pHead(tipo==='cucina'?'Scheda di produzione':'Food cost')+`<h1>${esc(r.nome)}</h1><p>${esc(r.categoria)}${r.unita?' · '+esc(r.unita):''}' · <b>'+fmt(c.dosi,2)+' dosi</b>'</p>`;
+    h+=`<table><tr><th>Ingrediente</th><th class="n">Quantità</th>${tipo==='fc'?'<th class="n">€/unità</th><th class="n">Costo</th>':''}</tr>${c.righe.filter(z=>z.x.nome).map(({x,i,u,base,costo})=>{ const un=base?'kg':i?i.unita:''; const q=x.dose!=null?x.dose*c.dosi:null; return `<tr><td>${esc(x.nome)}</td><td class="n"><b>${q!=null?qty(q,un):esc(x.doseTesto||'q.b.')}</b></td>${tipo==='fc'?`<td class="n">${u!=null?eur3(u):'manca'}</td><td class="n">${costo!=null?eur(costo*c.dosi):''}</td>`:''}</tr>`}).join('')}
+    <tr><td><b>Totale impasto crudo</b></td><td class="n"><b>${qty(c.crudo,'kg')}</b></td>${tipo==='fc'?`<td></td><td class="n"><b>${eur(c.cIng)}</b></td>`:''}</tr></table>`;
     if(r.procedimento) h+=`<h2>Procedimento</h2><div style="white-space:pre-wrap">${esc(r.procedimento)}</div>`;
-    if(tipo==='fc') h+=`<h2>Food cost — lotto ${fmt(r.lotto)||'–'} dosi</h2><table>
-      <tr><td>Peso finale del lotto</td><td class="n">${fmt(c.fin)} kg</td></tr><tr><td>Ingredienti</td><td class="n">${eur(c.cIng)}</td></tr><tr><td>Manodopera (${fmt(r.tProd)||0} min)</td><td class="n">${eur(c.man)}</td></tr>
-      <tr><td>Energia (${fmt(r.tCott)||0} min)</td><td class="n">${eur(c.en)}</td></tr><tr><td>Affitto e costi fissi</td><td class="n">${eur(c.aff)}</td></tr><tr><td><b>Costo totale lotto</b></td><td class="n"><b>${eur(c.tot)}</b></td></tr>
-      <tr><td><b>Costo di produzione</b></td><td class="n"><b>${eur(c.ckg)}/kg</b></td></tr><tr><td>Prezzo teorico (ricarico ${pct(c.ric)} + IVA)</td><td class="n">${eur(c.pkg)}/kg</td></tr>
-      <tr><td>Confezione ${fmt(r.confezione,0)||'–'} g: prezzo / margine</td><td class="n">${eur(c.pconf)} / ${eur(c.marg)}</td></tr><tr><td>Prezzo al banco · ricarico reale</td><td class="n">${esc(banco(r))} · ${pct(c.ricReale)}</td></tr></table>`;
+    if(tipo==='fc') h+=`<h2>Food cost — ${fmt(c.dosi,2)} dosi</h2><table>
+      <tr><td>Peso finale del lotto</td><td class="n">${fmt(c.fin)} kg</td></tr><tr><td>Ingredienti</td><td class="n">${eur(c.cIng)}</td></tr><tr><td>Manodopera (${fmt(c.tP,0)} min)</td><td class="n">${eur(c.man)}</td></tr>
+      <tr><td>Energia (${fmt(c.tC,0)} min)</td><td class="n">${eur(c.en)}</td></tr><tr><td>Affitto e costi fissi</td><td class="n">${eur(c.aff)}</td></tr><tr><td><b>Costo totale lotto</b></td><td class="n"><b>${eur(c.tot)}</b></td></tr>
+      <tr><td><b>Costo di produzione</b></td><td class="n"><b>${eur(c.ckg)}/kg</b></td></tr><tr><td>Prezzo al kg (ricarico ${pct(c.ric)} + IVA)</td><td class="n">${eur(c.pkg)}/kg · ${eur(perEtto(c.pkg))}/etto</td></tr>
+      ${c.aPezzo?`<tr><td>Pezzo da ${fmt(r.confezione,0)||'–'} g: prezzo / margine</td><td class="n">${eur(c.pconf)} / ${eur(c.marg)}</td></tr>`:''}<tr><td>Prezzo al banco · ricarico reale</td><td class="n">${esc(banco(r))} · ${pct(c.ricReale)}</td></tr></table>`;
     return printHTML(h);
   }
   if(tipo==='listino'){
@@ -933,18 +970,18 @@ function stampa(tipo){
 }
 
 /* ===================== AZIONI ===================== */
-function newRecipe(){ return {id:uid('r-'),nome:'',foglio:'',categoria:'',unita:'',allergeni:'',note:'',righe:[{ing:null,nome:'',dose:null,doseTesto:'',flag:''}],procedimento:'',lotto:1,tProd:null,tCott:null,perdita:null,ricarico:null,confezione:null,packaging:'',pezziPack:null,prezzoBanco:null,unitaBanco:'',etichetta:'',inProdotti:true,updatedAt:0,deleted:false,_new:true}; }
+function newRecipe(){ return {id:uid('r-'),nome:'',foglio:'',categoria:'',unita:'',allergeni:'',note:'',righe:[{ing:null,ric:null,nome:'',dose:null,doseTesto:'',flag:''}],procedimento:'',vendita:'kg',lotto:1,tProd:null,tCott:null,perdita:null,ricarico:null,confezione:null,packaging:'',pezziPack:null,prezzoBanco:null,unitaBanco:'',etichetta:'',inProdotti:true,updatedAt:0,deleted:false,_new:true}; }
 function readEdit(){
   const r=EDIT; if(!r) return;
   document.querySelectorAll('[data-e]').forEach(e=>r[e.dataset.e]=e.value);
   document.querySelectorAll('[data-n]').forEach(e=>r[e.dataset.n]=num(e.value));
   document.querySelectorAll('[data-p]').forEach(e=>{ const v=num(e.value); r[e.dataset.p]=v==null?null:v/100; });
-  document.querySelectorAll('[data-row]').forEach(e=>{ const x=r.righe[+e.dataset.row]; if(!x) return; if(e.dataset.f==='nome'){ x.nome=e.value.trim(); const i=INAME.get(x.nome.toLowerCase()); x.ing=i?i.id:null; } else { const v=num(e.value); x.dose=v; x.doseTesto=v==null?e.value.trim():''; } });
+  document.querySelectorAll('[data-row]').forEach(e=>{ const x=r.righe[+e.dataset.row]; if(!x) return; if(e.dataset.f==='nome'){ let v=e.value.trim(); x.ric=null; x.ing=null; if(v.startsWith(BASE)){ const bn=v.slice(BASE.length).trim().toLowerCase(); const br=ricette().find(q=>q.nome.toLowerCase()===bn&&q.id!==r.id); if(br){ x.ric=br.id; v=br.nome; } } if(!x.ric){ const i=INAME.get(v.toLowerCase()); x.ing=i?i.id:null; } x.nome=v; } else { const v=num(e.value); x.dose=v; x.doseTesto=v==null?e.value.trim():''; } });
 }
 function saveRecipe(){
   readEdit(); const r=EDIT; r.nome=r.nome.trim(); if(!r.nome) return alert('Scrivi il nome della ricetta.');
   if(ricette().some(x=>x.id!==r.id&&x.nome.toLowerCase()===r.nome.toLowerCase())) return alert('Esiste già una ricetta con questo nome.');
-  const miss=r.righe.filter(x=>x.nome&&!x.ing).map(x=>x.nome);
+  const miss=r.righe.filter(x=>x.nome&&!x.ing&&!x.ric).map(x=>x.nome);
   if(miss.length&&!confirm('Questi ingredienti non sono nell\'elenco e non avranno un costo:\n'+miss.join(', ')+'\n\nSalvo lo stesso?')) return;
   r.righe=r.righe.filter(x=>x.nome||x.dose!=null);
   const isNew=r._new; delete r._new; touch(r);
@@ -965,10 +1002,10 @@ async function pwSave(){
 
 document.addEventListener('click',async e=>{
   const t=e.target.closest('[data-tab],[data-act],[data-ric],[data-ing],[data-filt],[data-go]'); if(!t) return;
-  if(t.dataset.tab){ TAB=t.dataset.tab; Q=''; EDIT=null; IMP=TAB==='fatture'?IMP:IMP; render(); scrollTo(0,0); return; }
-  if(t.dataset.go!==undefined){ const [tab,f]=t.dataset.go.split(':'); TAB=tab; Q=''; FILT[tab==='ricette'?'ric':'ing']=f||''; render(); scrollTo(0,0); return; }
+  if(t.dataset.tab){ TAB=t.dataset.tab; Q=''; EDIT=null; render.newTab=true; render(); scrollTo(0,0); return; }
+  if(t.dataset.go!==undefined){ const [tab,f]=t.dataset.go.split(':'); TAB=tab; Q=''; FILT[tab==='ricette'?'ric':'ing']=f||''; render.newTab=true; render(); scrollTo(0,0); return; }
   if(t.dataset.filt!==undefined){ const [k,...v]=t.dataset.filt.split(':'); FILT[k]=v.join(':'); render(); return; }
-  if(t.dataset.ric&&!t.dataset.act){ if(EDIT&&!confirm('Esci dalla modifica senza salvare?')) return; EDIT=null; TAB='ricette'; SEL=t.dataset.ric; MOLT={m:1,kg:null}; render(); if(innerWidth<860) document.querySelector('.split>div:last-child')?.scrollIntoView({behavior:'smooth'}); return; }
+  if(t.dataset.ric&&!t.dataset.act){ if(EDIT&&!confirm('Esci dalla modifica senza salvare?')) return; EDIT=null; TAB='ricette'; SEL=t.dataset.ric; MOLT={d:null,kg:null,tp:null,tc:null}; render(); if(innerWidth<860) document.querySelector('.split>div:last-child')?.scrollIntoView({behavior:'smooth'}); return; }
   if(t.dataset.ing&&!t.dataset.act){ ingDialog(t.dataset.ing); return; }
   const [a,arg]=(t.dataset.act||'').split(/:(.*)/);
   switch(a){
@@ -984,11 +1021,13 @@ document.addEventListener('click',async e=>{
     case 'modric': EDIT=JSON.parse(JSON.stringify(getR(SEL))); return render();
     case 'annullaric': EDIT=null; if(!getR(SEL)) SEL=null; return render();
     case 'salvaric': return saveRecipe();
-    case 'addriga': readEdit(); EDIT.righe.push({ing:null,nome:'',dose:null,doseTesto:'',flag:''}); render(); { const ins=document.querySelectorAll('[data-f="nome"]'); ins[ins.length-1]?.focus(); } return;
+    case 'addriga': readEdit(); EDIT.righe.push({ing:null,ric:null,nome:'',dose:null,doseTesto:'',flag:''}); render(); { const ins=document.querySelectorAll('[data-f="nome"]'); ins[ins.length-1]?.focus(); } return;
     case 'delriga': readEdit(); EDIT.righe.splice(+arg,1); return render();
     case 'duplica': { const r=JSON.parse(JSON.stringify(getR(SEL))); r.id=uid('r-'); r.nome=r.nome+' (copia)'; r.foglio=''; r.etichetta=''; r._new=true; EDIT=r; SEL=r.id; return render(); }
-    case 'eliminaric': { const r=getR(SEL); if(!confirm('Eliminare "'+r.nome+'"? Resta nello storico dell\'archivio online.')) return; r.deleted=true; touch(r); SEL=null; commit(); return render(); }
+    case 'eliminaric': { const r=getR(SEL); const ub=usedAsBase(r.id); if(!confirm((ub.length?'Attenzione: è usata come base in '+ub.map(x=>x.nome).join(', ')+' (perderanno questo costo).\n\n':'')+'Eliminare "'+r.nome+'"? Resta nello storico dell\'archivio online.')) return; r.deleted=true; touch(r); SEL=null; commit(); return render(); }
     case 'stampa': return stampa(arg);
+    case 'simreset': MOLT={d:null,kg:null,tp:null,tc:null}; return render();
+    case 'simsalva': { const r=getR(SEL); const c=calc(r,{dosi:MOLT.d,kgVoluti:MOLT.kg,tProd:MOLT.tp,tCott:MOLT.tc}); if(!confirm(`Salvo come lotto standard ${fmt(c.dosi,3)} dosi con ${fmt(c.tP,0)} minuti di lavoro e ${fmt(c.tC,0)} di cottura?`)) return; r.lotto=+c.dosi.toFixed(3); r.tProd=c.tP; r.tCott=c.tC; touch(r); MOLT={d:null,kg:null,tp:null,tc:null}; commit(); render(); return toast('Lotto standard aggiornato'); }
     case 'nuovoing': return ingDialog(null);
     case 'ingsave': return ingSave(arg||null);
     case 'ingdel': { const i=getI(arg); if(!confirm('Eliminare "'+i.nome+'"?')) return; i.deleted=true; touch(i); closeDlg(); commit(); return render(); }
@@ -1019,7 +1058,9 @@ document.addEventListener('change',e=>{
     return render(); }
   if(t.dataset.prop!==undefined){ IMP.proposte[+t.dataset.prop].on=t.checked; return; }
   if(t.dataset.propdate!==undefined){ IMP.proposte[+t.dataset.propdate].data=t.value; return; }
-  if(t.id==='molt'||t.id==='kgv'){ const m=num($('#molt').value), kg=num($('#kgv').value); MOLT=t.id==='kgv'?{m:1,kg:kg>0?kg:null}:{m:m>0?m:1,kg:null}; return render(); }
+  if(/^sim_/.test(t.id)){ const v=num(t.value);
+    if(t.id==='sim_d'){ MOLT.d=v>0?v:null; MOLT.kg=null; } else if(t.id==='sim_kg'){ MOLT.kg=v>0?v:null; MOLT.d=null; } else if(t.id==='sim_tp') MOLT.tp=v!=null&&v>=0?v:null; else MOLT.tc=v!=null&&v>=0?v:null;
+    return render(); }
 });
 document.addEventListener('input',e=>{ if(e.target.id==='q'){ Q=e.target.value; render.focusQ=true; clearTimeout(render.qt); render.qt=setTimeout(render,180); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Enter'){ if(e.target.id==='pw') doUnlock(); if(e.target.id==='nome'&&$('#pw1')) doSetup(); } });

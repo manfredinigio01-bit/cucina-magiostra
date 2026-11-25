@@ -19,6 +19,13 @@ Alzare la versione in tre punti: `APP_VERSION` in `app.js`, `version.json`, `CAC
 ## Food cost
 `calc()` replica le formule del file Excel v10 (Gastronomia_ricettario_foodcost_v10): verificato su 104 schede, differenze 0. L'export (`buildXlsx`, ExcelJS in `lib/`) riscrive la stessa struttura con formule; ricalcolato con LibreOffice = valori dell'app.
 
+## Funzioni aggiunte (v1.2.0, 25/11/2026)
+- `ricetta.vendita` 'kg' | 'pezzo' (default da `unitaBanco`: €/pz o porzione → pezzo). Con 'kg' si mostrano solo €/kg ed €/etto: niente prezzo a confezione né in app né nell'Excel (D67 vuota). Con 'pezzo' compare anche il prezzo del pezzo da `confezione` grammi (+ packaging).
+- Ricette base: una riga può avere `ric` (id di un'altra ricetta) al posto di `ing`; dose in kg; costo = `calc(base).ckg` (costo pieno), oppure solo ingredienti se la base non ha lotto. Protezione dai cicli. Nell'editor si scelgono le voci "Base: nome". Excel: G = foglio della base!D61.
+- Scheda ricetta: "Dosi da produrre" / "kg finali" / minuti simulano il food cost (`calc(r,{dosi,kgVoluti,tProd,tCott})`), senza salvare; "Salva come lotto standard" li salva.
+- Le liste (`.list`, `.scroll`) conservano lo scorrimento a ogni render.
+- Verifica Excel: per ricalcolare davvero con LibreOffice bisogna togliere i risultati salvati (riaprire e salvare con openpyxl), altrimenti LibreOffice mostra i valori in cache. 25/11: 1668 celle, 0 differenze.
+
 ## File in ingresso (letti in locale)
 Fatture FatturaPA .xml/.p7m/.zip (prezzo netto = PrezzoTotale/Quantita; TD04/TD05 ignorate; farine solo Mulino Sobrino; riga più recente / formato più grande), PROPOSTE della GASTRONOMIA .docx → archivio piatti e prezzo al banco, .xlsx con colonne descrizione/prezzo. PDF e foto: li elabora Claude in chat.
 
