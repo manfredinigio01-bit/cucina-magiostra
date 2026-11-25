@@ -37,3 +37,10 @@ Fatture FatturaPA .xml/.p7m/.zip (prezzo netto = PrezzoTotale/Quantita; TD04/TD0
 
 ## Etichette
 `ricetta.etichetta` = id prodotto in `etichette-magiostra-dati/archivio.json`. L'app può creare/aggiornare il testo ingredienti (ordine per peso) con merge su sha.
+
+## Margine reale al banco (v1.4.0, 25/11/2026)
+- `calc(r).banco` = {u:'kg'|'pz', lordo, netto, costo, marg, margPct, ric, ipo, diff, diffPct, unita, margTot, rifRic}. €/etto ed €/kg → al kg sul costo pieno €/kg (senza packaging); €/pz ed €/porzione → a pezzo con `confezione` g + packaging. Margine = prezzo al banco senza IVA − costo pieno; % sul prezzo senza IVA.
+- Prezzo ipotetico = costo pieno × (1 + `parametri.ricaricoDef`, 70%) × (1 + IVA), sempre al 70% anche se la ricetta ha un ricarico suo (mostrato a parte). Serve solo come confronto: il prezzo al banco lo decide Giovanni.
+- `c.ricReale` resta solo per €/etto ed €/kg (colonna M dell'Excel con formula). Le colonne O–T dei Prodotti sono valori scritti dall'app.
+- Quadro: tabella "Margine reale al banco" con i prodotti in stato OK, dal margine più basso.
+- Pezzatura predefinita 300 g: per i prodotti a €/pz va controllata (Polpette di miglio, Panna cotta, Vegan kebab risultano in perdita o quasi per questo).

@@ -2,7 +2,7 @@
    Dati: repository GitHub PRIVATO (ricettario.json), copia locale CIFRATA con la password (AES-GCM 256, chiave PBKDF2-SHA256).
    Nessuna dipendenza esterna a runtime: lib/ contiene fflate (zip) ed ExcelJS (xlsx), caricate da questo stesso sito. */
 'use strict';
-const APP_VERSION='1.3.1';
+const APP_VERSION='1.4.0';
 const DEF_REPO='manfredinigio01-bit/magiostra-cucina-dati';
 const ETI_REPO='manfredinigio01-bit/etichette-magiostra-dati';
 const DATA_FILE='ricettario.json';
@@ -160,7 +160,36 @@ function calc(r,opt={}){
   // ricarico reale al banco (prezzo €/etto o €/kg, IVA inclusa) sul costo pieno €/kg
   let ricReale=null; const pb=r.prezzoBanco;
   if(pb!=null&&ckg){ const perKg=/etto/i.test(r.unitaBanco)?pb*10:/kg/i.test(r.unitaBanco)?pb:null; if(perKg!=null) ricReale=perKg/(1+P.iva)/ckg-1; }
-  return {righe,peso,costo,manc,molt,dosi,tP,tC,crudo,fin,cIng,man,en,aff,tot,ckg,ric,pkg,pcost,conf,pconf,marg,stato,ricReale,aPezzo,pesoIng:tot>0?cIng/tot:null,pesoMan:tot>0?man/tot:null};
+  // margine reale al banco, sul costo pieno (ingredienti + lavoro + energia + affitto e fissi cucina), IVA esclusa.
+  // €/etto o €/kg → al kg (senza packaging); €/pz o €/porzione → a pezzo (pezzatura + packaging).
+  let mb=null; const rifRic=P.ricaricoDef;
+  if(pb!=null&&ckg!=null){
+    const perKg=/etto/i.test(r.unitaBanco)?pb*10:/kg/i.test(r.unitaBanco)?pb:null;
+    const perPz=/pz|porz/i.test(r.unitaBanco)?pb:null;
+    if(perKg!=null){ const netto=perKg/(1+P.iva), m=netto-ckg; mb={u:'kg',lordo:perKg,netto,costo:ckg,marg:m,margPct:netto>0?m/netto:null,ric:netto/ckg-1,ipo:ckg*(1+rifRic)*(1+P.iva),unita:fin>0?fin:null}; }
+    else if(perPz!=null&&(r.confezione||0)>0){ const cp=ckg*r.confezione/1000+pcost, netto=perPz/(1+P.iva), m=netto-cp; mb={u:'pz',lordo:perPz,netto,costo:cp,marg:m,margPct:netto>0?m/netto:null,ric:netto/cp-1,ipo:cp*(1+rifRic)*(1+P.iva),unita:fin>0?fin*1000/r.confezione:null}; }
+    if(mb){ mb.diff=mb.lordo-mb.ipo; mb.diffPct=mb.ipo>0?mb.diff/mb.ipo:null; mb.margTot=mb.unita!=null?mb.marg*mb.unita:null; mb.rifRic=rifRic; }
+  }
+  return {righe,peso,costo,manc,molt,dosi,tP,tC,crudo,fin,cIng,man,en,aff,tot,ckg,ric,pkg,pcost,conf,pconf,marg,stato,ricReale,banco:mb,aPezzo,pesoIng:tot>0?cIng/tot:null,pesoMan:tot>0?man/tot:null};
+}
+// riquadri del food cost: prezzo ipotetico con il ricarico di riferimento e margine reale al banco
+function fcIpotetico(r,c){
+  const P=S.parametri, rif=P.ricaricoDef, k=(1+rif)*(1+P.iva);
+  const kg=c.ckg!=null?c.ckg*k:null;
+  const cp=c.conf!=null?c.conf:(c.banco&&c.banco.u==='pz'?c.banco.costo:null);
+  const pz=cp!=null?cp*k:null, g=r.confezione||0;
+  const altro=r.ricarico!=null&&Math.abs(r.ricarico-rif)>0.001;
+  return `<div><span>Prezzo ipotetico con ricarico ${pct(rif)} (+ IVA)</span><b>${pz!=null?eur(pz)+' al pezzo':eur(kg)+'/kg'}</b><span>${pz!=null?`pezzo da ${fmt(g,0)} g con packaging · ${eur(kg)}/kg · `:''}${eur(perEtto(kg))} all'etto</span>${altro?`<span>col ricarico della ricetta (${pct(r.ricarico)}): ${c.aPezzo&&c.pconf!=null?eur(c.pconf)+' al pezzo':eur(c.pkg)+'/kg'}</span>`:''}</div>`;
+}
+function fcBanco(r,c){
+  const b=c.banco;
+  if(r.prezzoBanco==null) return '<div><span>Prezzo al banco</span><b>–</b><span>inseriscilo in Modifica per vedere il margine reale</span></div>';
+  if(!b) return `<div><span>Prezzo al banco</span><b>${esc(banco(r))}</b><span>${c.ckg==null?'margine: manca il costo pieno':/pz|porz/i.test(r.unitaBanco)?'margine: manca la pezzatura (g)':'margine: scegli l\'unità (€/etto, €/kg, €/pz)'}</span></div>`;
+  const u=b.u==='kg'?'/kg':' al pezzo';
+  const cl=b.marg<0?'r':b.ric<b.rifRic-0.05?'w':'ok';
+  return `<div><span>Prezzo al banco attuale</span><b>${esc(banco(r))}</b><span>${b.u==='kg'&&/etto/i.test(r.unitaBanco)?'= '+eur(b.lordo)+'/kg · ':''}rispetto all'ipotetico <span class="chip ${b.diff<0?'r':'ok'}">${b.diff>0?'+':''}${eur(b.diff)} (${b.diff>0?'+':''}${pct(b.diffPct)})</span></span></div>
+      <div><span>Margine reale al banco (IVA esclusa)</span><b><span class="chip ${cl}">${eur(b.marg)}${u}</span></b><span>${pct(b.margPct)} del prezzo senza IVA · ricarico reale ${pct(b.ric)}</span><span>prezzo senza IVA ${eur(b.netto)} − costo pieno ${eur(b.costo)}</span></div>
+      <div><span>Margine su questa produzione</span><b>${eur(b.margTot)}</b><span>${b.u==='kg'?fmt(b.unita,2)+' kg venduti al banco':'circa '+fmt(b.unita,1)+' pezzi da '+fmt(r.confezione,0)+' g'}</span></div>`;
 }
 const STATO_CL={'OK':'ok','Tempi mancanti':'w','Prezzi mancanti':'w','Dosi mancanti':'w','Lotto mancante':'w','Ricetta da inserire':'r'};
 
@@ -333,7 +362,9 @@ function vQuadro(){
   const cnt={}; C.forEach(([r,c])=>cnt[c.stato]=(cnt[c.stato]||0)+1);
   const I=ings(); const noPrice=I.filter(i=>unitCost(i)==null);
   const old=I.filter(i=>{ const d=lastPriceDate(i); const m=monthsSince(d); return unitCost(i)!=null&&(m==null||m>=6); });
-  const sotto=C.filter(([r,c])=>c.ricReale!=null&&c.ricReale<(r.ricarico??S.parametri.ricaricoDef)-0.05).sort((a,b)=>a[1].ricReale-b[1].ricReale);
+  const MB=C.filter(([r,c])=>c.stato==='OK'&&c.banco).sort((a,b)=>a[1].banco.margPct-b[1].banco.margPct);
+  const rif=S.parametri.ricaricoDef, nPerd=MB.filter(([r,c])=>c.banco.marg<0).length, nSotto=MB.filter(([r,c])=>c.banco.marg>=0&&c.banco.ric<rif-0.05).length;
+  const noMB=C.filter(([r,c])=>r.prezzoBanco!=null&&!(c.stato==='OK'&&c.banco)).length;
   const stag=STAG[new Date().getMonth()];
   const ripro=S.archivio.filter(a=>!a.deleted&&a.stagioni.includes(stag)&&(monthsSince(a.ultima)??99)>=12).sort((a,b)=>(b.volte||0)-(a.volte||0)).slice(0,14);
   const recenti=[]; I.forEach(i=>(i.storico||[]).forEach(s=>{ const m=monthsSince(s.data); if(m!=null&&m<=1&&s.prima&&s.prezzoUnit) recenti.push([i,s,s.prezzoUnit/s.prima-1]); }));
@@ -347,23 +378,23 @@ function vQuadro(){
     ${k(I.length,'ingredienti','ingredienti:')}
     ${k(old.length,'prezzi vecchi (oltre 6 mesi)','ingredienti:vecchi')}
   </div>
+  <div class="card"><h2>Margine reale al banco, prodotto per prodotto</h2>
+   <p class="small">${MB.length} prodotti con food cost completo e prezzo al banco: <span class="chip r">${nPerd} in perdita</span> <span class="chip w">${nSotto} sotto il ricarico del ${pct(rif)}</span> <span class="chip ok">${MB.length-nPerd-nSotto} in linea o sopra</span></p>
+   ${MB.length?`<div class="scroll" style="max-height:460px"><table class="t"><tr><th>Prodotto</th><th class="n">Costo pieno</th><th class="n">Ipotetico ${pct(rif)}</th><th class="n">Banco</th><th class="n">Margine (senza IVA)</th><th class="n">% sul prezzo</th><th class="n">Ricarico reale</th></tr>
+   ${MB.map(([r,c])=>{ const b=c.banco, u=b.u==='kg'?'/kg':'/pz', cl=b.marg<0?'r':b.ric<rif-0.05?'w':'ok'; return `<tr data-ric="${r.id}" style="cursor:pointer"><td>${esc(r.nome)}</td><td class="n">${eur(b.costo)}${u}</td><td class="n">${eur(b.ipo)}${u}</td><td class="n">${esc(banco(r))}</td><td class="n"><span class="chip ${cl}">${eur(b.marg)}${u}</span></td><td class="n">${pct(b.margPct)}</td><td class="n">${pct(b.ric)}</td></tr>`}).join('')}</table></div>`:'<p class="mut">Nessun prodotto con food cost completo e prezzo al banco.</p>'}
+   <p class="small mut">Dal margine più basso. Costo pieno = ingredienti + lavoro + energia + affitto e fissi della cucina (a pezzo anche il packaging). Margine = prezzo al banco senza IVA − costo pieno. Ipotetico = costo pieno + ricarico ${pct(rif)} + IVA.${noMB?` ${noMB} prodotti hanno un prezzo al banco ma non compaiono: food cost incompleto, unità mancante o pezzatura mancante.`:''}</p></div>
   <div class="grid2">
-   <div class="card"><h2>Prezzo al banco sotto il ricarico voluto</h2>
-    ${sotto.length?`<div class="scroll"><table class="t"><tr><th>Prodotto</th><th class="n">Costo €/kg</th><th class="n">Banco</th><th class="n">Ricarico reale</th><th class="n">Voluto</th></tr>
-    ${sotto.slice(0,15).map(([r,c])=>`<tr data-ric="${r.id}" style="cursor:pointer"><td>${esc(r.nome)}</td><td class="n">${eur(c.ckg)}</td><td class="n">${esc(banco(r))}</td><td class="n"><span class="chip ${c.ricReale<0.3?'r':'w'}">${pct(c.ricReale)}</span></td><td class="n">${pct(r.ricarico??S.parametri.ricaricoDef)}</td></tr>`).join('')}</table></div>`
-    :'<p class="mut">Nessun prodotto con food cost completo è venduto sotto il ricarico voluto (o mancano i prezzi al banco).</p>'}
-    <p class="small mut">Ricarico reale = prezzo al banco senza IVA ÷ costo pieno €/kg − 1. Conta solo i prodotti con food cost completo e prezzo al banco.</p></div>
    <div class="card"><h2>Prezzi cambiati nell'ultimo mese</h2>
     ${recenti.length?`<table class="t"><tr><th>Ingrediente</th><th>Fornitore</th><th class="n">Prima</th><th class="n">Ora</th><th class="n">Var.</th></tr>${recenti.slice(0,12).map(([i,s,v])=>`<tr><td>${esc(i.nome)}</td><td>${esc(s.fornitore)}</td><td class="n">${eur3(s.prima)}</td><td class="n">${eur3(s.prezzoUnit)}</td><td class="n"><span class="chip ${v>0.05?'r':v<-0.05?'ok':'g'}">${v>0?'+':''}${pct(v)}</span></td></tr>`).join('')}</table>`:'<p class="mut">Nessun aggiornamento prezzi nell\'ultimo mese. Carica le fatture XML in "Fatture e file".</p>'}
    </div>
-  </div>
-  <div class="grid2">
-   <div class="card"><h2>Da riproporre questa stagione (${stag})</h2><p class="small mut">Piatti già fatti in ${stag}, non proposti da almeno 12 mesi.</p>
-    ${ripro.length?`<table class="t">${ripro.map(a=>`<tr><td>${esc(a.nome)}</td><td class="mut small">${a.tipo}</td><td class="n small">${a.volte||0} volte</td><td class="n small mut">${esc(dIT(a.ultima))}</td></tr>`).join('')}</table>`:'<p class="mut">Nessuno.</p>'}</div>
    <div class="card"><h2>Ingredienti da sistemare</h2>
     <p><b>${noPrice.length}</b> senza prezzo · <b>${old.length}</b> con prezzo più vecchio di 6 mesi</p>
     ${noPrice.length?`<p class="small">${noPrice.slice(0,30).map(i=>esc(i.nome)).join(', ')}${noPrice.length>30?'…':''}</p>`:''}
     <button class="b" data-go="ingredienti:vecchi">Vedi l'elenco</button></div>
+  </div>
+  <div class="grid2">
+   <div class="card"><h2>Da riproporre questa stagione (${stag})</h2><p class="small mut">Piatti già fatti in ${stag}, non proposti da almeno 12 mesi.</p>
+    ${ripro.length?`<table class="t">${ripro.map(a=>`<tr><td>${esc(a.nome)}</td><td class="mut small">${a.tipo}</td><td class="n small">${a.volte||0} volte</td><td class="n small mut">${esc(dIT(a.ultima))}</td></tr>`).join('')}</table>`:'<p class="mut">Nessuno.</p>'}</div>
   </div>`;
 }
 
@@ -416,12 +447,12 @@ function ricView(r){
     ${r.procedimento?`<h3>Procedimento</h3><div class="proc">${esc(r.procedimento)}</div>`:''}
     <h3>Food cost per ${fmt(c.dosi,2)} dosi${sim?' <span class="chip w">simulazione</span>':''}</h3>
     <div class="fc">
-      <div><span>Costo di produzione</span><b>${eur(c.ckg)}/kg</b>${sim&&st.ckg!=null&&c.ckg!=null?`<span>lotto standard: ${eur(st.ckg)}/kg</span>`:''}</div>
-      <div><span>Prezzo al kg (ricarico ${pct(c.ric)} + IVA)</span><b>${eur(c.pkg)}/kg</b><span>= ${eur(perEtto(c.pkg))} all'etto</span></div>
-      ${c.aPezzo?`<div><span>Pezzo da ${fmt(r.confezione,0)||'?'} g (con packaging)</span><b>${eur(c.pconf)}</b><span>margine ${eur(c.marg)}</span></div>`:''}
-      <div><span>Prezzo al banco</span><b>${esc(banco(r))}</b><span>ricarico reale ${pct(c.ricReale)}</span></div>
+      <div><span>Costo pieno di produzione</span><b>${eur(c.ckg)}/kg</b>${sim&&st.ckg!=null&&c.ckg!=null?`<span>lotto standard: ${eur(st.ckg)}/kg</span>`:''}</div>
+      ${fcIpotetico(r,c)}
+      ${fcBanco(r,c)}
       <div><span>Costo totale della produzione</span><b>${eur(c.tot)}</b><span>${fmt(c.fin,2)} kg finali</span></div>
     </div>
+    <p class="small mut">Costo pieno = ingredienti + lavoro + energia + affitto e costi fissi della cucina${c.banco&&c.banco.u==='pz'||c.aPezzo?' (a pezzo anche il packaging)':''}. Margine = prezzo al banco senza IVA − costo pieno: è quello che resta per il negozio (affitto del negozio, banco, utile). Il prezzo ipotetico è solo un confronto: il prezzo al banco lo decidi tu.</p>
     <div class="scroll"><table class="t" style="margin-top:10px">
       <tr><td>Peso crudo</td><td class="n">${fmt(c.crudo)} kg</td><td>Perdita in cottura</td><td class="n">${pct(r.perdita||0)}</td></tr>
       <tr><td>Peso finale</td><td class="n">${fmt(c.fin)} kg</td><td>Minuti lavoro / cottura</td><td class="n">${fmt(c.tP,0)} / ${fmt(c.tC,0)}</td></tr>
@@ -698,7 +729,7 @@ async function buildXlsx(){
   // Prodotti
   wsP.getCell('A1').value='La Magiostra — Cucina: prodotti, ricettario e food cost'; wsP.getCell('A1').font=T;
   wsP.getCell('A2').value='Generato dall\'app Cucina il '+new Date().toLocaleString('it-IT')+'. Clicca il nome per aprire la scheda. Per modificare usa l\'app: questo file viene riscritto.';
-  wsP.getRow(4).values=['#','Prodotto','Categoria','Stato','Costo produzione €/kg','Ricarico','Prezzo €/kg (IVA incl.)','Pezzatura (g)','Prezzo a pezzo','Margine a pezzo','Prezzo al banco','Unità','Ricarico reale al banco','Prezzo €/etto (IVA incl.)']; hdr(wsP.getRow(4));
+  wsP.getRow(4).values=['#','Prodotto','Categoria','Stato','Costo produzione €/kg','Ricarico','Prezzo €/kg (IVA incl.)','Pezzatura (g)','Prezzo a pezzo','Margine a pezzo','Prezzo al banco','Unità','Ricarico reale al banco','Prezzo €/etto (IVA incl.)','Margine al banco: unità','Costo pieno per unità','Prezzo ipotetico con ricarico '+Math.round(S.parametri.ricaricoDef*100)+'% (IVA incl.)','Margine al banco (senza IVA)','Margine % sul prezzo senza IVA','Banco − ipotetico']; hdr(wsP.getRow(4));
   refs.forEach(([r,name,c],k)=>{ const row=5+k, q=qs(name);
     wsP.getCell('A'+row).value=k+1;
     wsP.getCell('B'+row).value={text:r.nome,hyperlink:`#${q}!A1`}; wsP.getCell('B'+row).font={color:{argb:'FF7C3A20'},underline:true};
@@ -709,10 +740,14 @@ async function buildXlsx(){
     wsP.getCell('K'+row).value=r.prezzoBanco; wsP.getCell('L'+row).value=r.unitaBanco||null;
     wsP.getCell('M'+row).value={formula:`IF(AND(ISNUMBER(K${row}),L${row}="€/etto",ISNUMBER(E${row})),K${row}*10/(1+Parametri!$B$13)/E${row}-1,IF(AND(ISNUMBER(K${row}),L${row}="€/kg",ISNUMBER(E${row})),K${row}/(1+Parametri!$B$13)/E${row}-1,""))`,result:c.ricReale??''};
     wsP.getCell('N'+row).value={formula:`IF(ISNUMBER(G${row}),G${row}/10,"")`,result:c.pkg!=null?c.pkg/10:''};
+    const b=c.banco;
+    if(b){ wsP.getCell('O'+row).value=b.u==='kg'?'€/kg':'€/pz'; wsP.getCell('P'+row).value=b.costo; wsP.getCell('Q'+row).value=b.ipo; wsP.getCell('R'+row).value=b.marg; wsP.getCell('S'+row).value=b.margPct; wsP.getCell('T'+row).value=b.diff;
+      if(b.marg<0) wsP.getCell('R'+row).font={color:{argb:'FFB3261E'},bold:true}; }
     if(c.stato!=='OK') wsP.getCell('D'+row).font={color:{argb:'FFA86B00'}};
   });
-  [5,36,16,18,14,10,16,12,14,14,12,10,14,14].forEach((w,k)=>wsP.getColumn(k+1).width=w);
-  ['E','G','I','J','K','N'].forEach(c=>wsP.getColumn(c).numFmt='#,##0.00 €'); ['F','M'].forEach(c=>wsP.getColumn(c).numFmt='0%');
+  wsP.getCell('O3').value='Colonne O–T: calcolate dall\'app sul costo pieno (ingredienti, lavoro, energia, affitto e fissi cucina; a pezzo anche il packaging).'; wsP.getCell('O3').font={italic:true,size:9,color:{argb:'FF777777'}};
+  [5,36,16,18,14,10,16,12,14,14,12,10,14,14,10,14,16,16,14,14].forEach((w,k)=>wsP.getColumn(k+1).width=w);
+  ['E','G','I','J','K','N','P','Q','R','T'].forEach(c=>wsP.getColumn(c).numFmt='#,##0.00 €'); ['F','M','S'].forEach(c=>wsP.getColumn(c).numFmt='0%');
   // Archivio piatti
   const wsR=wb.addWorksheet('Archivio piatti',{views:[{state:'frozen',ySplit:1}]});
   wsR.getRow(1).values=['Piatto','Tipo','Categoria','Primavera','Estate','Autunno','Inverno','Mesi','Ultimo prezzo','Unità','Volte','Prima volta','Ultima volta','Materia prima']; hdr(wsR.getRow(1));
@@ -994,7 +1029,7 @@ function stampa(tipo){
       <tr><td>Peso finale del lotto</td><td class="n">${fmt(c.fin)} kg</td></tr><tr><td>Ingredienti</td><td class="n">${eur(c.cIng)}</td></tr><tr><td>Manodopera (${fmt(c.tP,0)} min)</td><td class="n">${eur(c.man)}</td></tr>
       <tr><td>Energia (${fmt(c.tC,0)} min)</td><td class="n">${eur(c.en)}</td></tr><tr><td>Affitto e costi fissi</td><td class="n">${eur(c.aff)}</td></tr><tr><td><b>Costo totale lotto</b></td><td class="n"><b>${eur(c.tot)}</b></td></tr>
       <tr><td><b>Costo di produzione</b></td><td class="n"><b>${eur(c.ckg)}/kg</b></td></tr><tr><td>Prezzo al kg (ricarico ${pct(c.ric)} + IVA)</td><td class="n">${eur(c.pkg)}/kg · ${eur(perEtto(c.pkg))}/etto</td></tr>
-      ${c.aPezzo?`<tr><td>Pezzo da ${fmt(r.confezione,0)||'–'} g: prezzo / margine</td><td class="n">${eur(c.pconf)} / ${eur(c.marg)}</td></tr>`:''}<tr><td>Prezzo al banco · ricarico reale</td><td class="n">${esc(banco(r))} · ${pct(c.ricReale)}</td></tr></table>`;
+      ${c.aPezzo?`<tr><td>Pezzo da ${fmt(r.confezione,0)||'–'} g: prezzo / margine</td><td class="n">${eur(c.pconf)} / ${eur(c.marg)}</td></tr>`:''}<tr><td>Prezzo ipotetico con ricarico ${pct(S.parametri.ricaricoDef)}</td><td class="n">${c.banco?eur(c.banco.ipo)+(c.banco.u==='kg'?'/kg':' al pezzo'):eur(c.ckg!=null?c.ckg*(1+S.parametri.ricaricoDef)*(1+S.parametri.iva):null)+'/kg'}</td></tr><tr><td>Prezzo al banco</td><td class="n">${esc(banco(r))}</td></tr>${c.banco?`<tr><td>Margine reale al banco (senza IVA)</td><td class="n">${eur(c.banco.marg)}${c.banco.u==='kg'?'/kg':' al pezzo'} · ${pct(c.banco.margPct)} del prezzo · ricarico reale ${pct(c.banco.ric)}</td></tr>`:''}</table>`;
     return printHTML(h);
   }
   if(tipo==='listino'){
@@ -1006,7 +1041,7 @@ function stampa(tipo){
   }
   if(tipo==='quadro'){
     const C=ricette().map(r=>[r,calc(r)]);
-    return printHTML(pHead('Quadro food cost')+`<h1>Quadro food cost</h1><table><tr><th>Prodotto</th><th>Stato</th><th class="n">Costo €/kg</th><th class="n">Prezzo teorico €/kg</th><th class="n">Banco</th><th class="n">Ricarico reale</th></tr>${C.map(([r,c])=>`<tr><td>${esc(r.nome)}</td><td>${esc(c.stato)}</td><td class="n">${eur(c.ckg)}</td><td class="n">${eur(c.pkg)}</td><td class="n">${r.prezzoBanco!=null?esc(banco(r)):''}</td><td class="n">${pct(c.ricReale)}</td></tr>`).join('')}</table>`);
+    return printHTML(pHead('Quadro food cost')+`<h1>Quadro food cost</h1><table><tr><th>Prodotto</th><th>Stato</th><th class="n">Costo €/kg</th><th class="n">Prezzo teorico €/kg</th><th class="n">Banco</th><th class="n">Margine al banco</th><th class="n">% sul prezzo</th></tr>${C.map(([r,c])=>`<tr><td>${esc(r.nome)}</td><td>${esc(c.stato)}</td><td class="n">${eur(c.ckg)}</td><td class="n">${eur(c.pkg)}</td><td class="n">${r.prezzoBanco!=null?esc(banco(r)):''}</td><td class="n">${c.banco?eur(c.banco.marg)+(c.banco.u==='kg'?'/kg':'/pz'):''}</td><td class="n">${c.banco?pct(c.banco.margPct):''}</td></tr>`).join('')}</table>`);
   }
 }
 
