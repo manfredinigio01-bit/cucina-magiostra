@@ -2,7 +2,7 @@
    Dati: repository GitHub PRIVATO (ricettario.json), copia locale CIFRATA con la password (AES-GCM 256, chiave PBKDF2-SHA256).
    Nessuna dipendenza esterna a runtime: lib/ contiene fflate (zip) ed ExcelJS (xlsx), caricate da questo stesso sito. */
 'use strict';
-const APP_VERSION='1.1.0';
+const APP_VERSION='1.1.1';
 const DEF_REPO='manfredinigio01-bit/magiostra-cucina-dati';
 const ETI_REPO='manfredinigio01-bit/etichette-magiostra-dati';
 const DATA_FILE='ricettario.json';
@@ -876,8 +876,9 @@ function applyProposte(){
 async function etiWrite(r){
   const c=calc(r);
   const ord=c.righe.filter(z=>z.x.nome).sort((a,b)=>((b.x.dose||0)*((b.i&&b.i.unita==='pz')?(b.i.pesoPezzo||0):1))-((a.x.dose||0)*((a.i&&a.i.unita==='pz')?(a.i.pesoPezzo||0):1))).map(z=>z.x.nome.toLowerCase());
-  let txt=ord.join(', '); txt=txt.charAt(0).toUpperCase()+txt.slice(1)+'.';
+  let txt=ord.join(', '); txt=txt?txt.charAt(0).toUpperCase()+txt.slice(1)+'.':'';
   const ex=r.etichetta?ETI.prodotti.find(p=>p.id===r.etichetta):null;
+  if(!ex&&!txt) return alert('Questa ricetta non ha ancora ingredienti: inseriscili prima di creare l\'etichetta.');
   dialog(ex?'Aggiorna etichetta':'Nuova etichetta',`<p class="small">Testo ingredienti in ordine di peso decrescente, preso dalla ricetta. <b>Completalo</b> con i sotto-ingredienti dei prodotti composti (es. "salsa di soia (acqua, soia, sale)"): in etichetta sono obbligatori. Gli allergeni li evidenzia l'app etichette.</p>
    <label class="f">Nome in etichetta<input class="i" id="e_nome" value="${esc(ex?ex.nome:r.nome)}"></label>
    <label class="f">Ingredienti<textarea class="i" id="e_ing">${esc(ex?ex.ingredienti:txt)}</textarea></label>
