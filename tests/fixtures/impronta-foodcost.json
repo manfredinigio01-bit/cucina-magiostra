@@ -1,0 +1,10 @@
+{
+ "r-base": "{\"stato\":\"OK\",\"ckg\":7.118055555555555,\"tot\":38.4375,\"pkg\":13.310763888888891,\"conf\":null,\"pconf\":null,\"banco\":{\"u\":\"kg\",\"lordo\":18,\"netto\":16.363636363636363,\"costo\":7.118055555555555,\"marg\":9.245580808080808,\"margPct\":0.5650077160493827,\"ric\":1.298891352549889,\"ipo\":13.310763888888891,\"unita\":5.4,\"diff\":4.689236111111109,\"diffPct\":0.3522890309116993,\"margTot\":49.92613636363637,\"rifRic\":0.7}}",
+ "r-pezzo": "{\"stato\":\"OK\",\"ckg\":7.118055555555555,\"tot\":38.4375,\"pkg\":13.310763888888891,\"conf\":2.2354166666666666,\"pconf\":4.180229166666667,\"banco\":{\"u\":\"pz\",\"lordo\":3.5,\"netto\":3.1818181818181817,\"costo\":2.2354166666666666,\"marg\":0.946401515151515,\"margPct\":0.2974404761904762,\"ric\":0.4233669406083198,\"ipo\":4.180229166666667,\"unita\":18,\"diff\":-0.6802291666666669,\"diffPct\":-0.1627253290539295,\"margTot\":17.03522727272727,\"rifRic\":0.7}}",
+ "r-composta": "{\"stato\":\"OK\",\"ckg\":14.019097222222223,\"tot\":22.430555555555557,\"pkg\":26.215711805555557,\"conf\":null,\"pconf\":null,\"banco\":null}",
+ "r-cicloA": "{\"stato\":\"Prezzi mancanti\",\"ckg\":3.4375,\"tot\":3.4375,\"pkg\":6.4281250000000005,\"conf\":null,\"pconf\":null,\"banco\":null}",
+ "r-cicloB": "{\"stato\":\"Prezzi mancanti\",\"ckg\":3.4375,\"tot\":3.4375,\"pkg\":6.4281250000000005,\"conf\":null,\"pconf\":null,\"banco\":null}",
+ "r-mancaprezzo": "{\"stato\":\"Prezzi mancanti\",\"ckg\":4.591584158415841,\"tot\":4.6375,\"pkg\":8.586262376237624,\"conf\":null,\"pconf\":null,\"banco\":null}",
+ "r-vuota": "{\"stato\":\"Ricetta da inserire\",\"ckg\":null,\"tot\":0,\"pkg\":null,\"conf\":null,\"pconf\":null,\"banco\":null}",
+ "r-senzatempi": "{\"stato\":\"Tempi mancanti\",\"ckg\":1.2,\"tot\":1.2,\"pkg\":2.244,\"conf\":null,\"pconf\":null,\"banco\":null}"
+}

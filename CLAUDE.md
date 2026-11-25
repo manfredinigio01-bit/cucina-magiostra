@@ -44,3 +44,10 @@ Fatture FatturaPA .xml/.p7m/.zip (prezzo netto = PrezzoTotale/Quantita; TD04/TD0
 - `c.ricReale` resta solo per €/etto ed €/kg (colonna M dell'Excel con formula). Le colonne O–T dei Prodotti sono valori scritti dall'app.
 - Quadro: tabella "Margine reale al banco" con i prodotti in stato OK, dal margine più basso.
 - Pezzatura predefinita 300 g: per i prodotti a €/pz va controllata (Polpette di miglio, Panna cotta, Vegan kebab risultano in perdita o quasi per questo).
+
+## Test automatici (25/11/2026)
+- `npm test` (Node 22 + Playwright, Chrome senza finestra; in locale `CHROME_PATH=/percorso/chrome npm test`). Gira anche su GitHub a ogni push (`.github/workflows/test.yml`): X rossa = non pubblicare.
+- Solo dati INVENTATI in `tests/fixtures/ricettario-prova.json`: questo repository è pubblico, mai ricette o prezzi veri. I valori attesi del food cost sono calcolati a mano nei commenti del test.
+- `tests/fixtures/impronta-foodcost.json`: risultato di `calc()` per ogni ricetta di prova. Se una modifica VOLUTA cambia il food cost, rigenerarla con `AGGIORNA_IMPRONTA=1 npm test` e spiegarlo nel commit.
+- Dati veri, prima e dopo una modifica importante: `node tests/confronto-dati-veri.mjs <ricettario.json> tests/locale/prima.json` (cartella ignorata da git) e confrontare i file.
+- v1.4.1: `baseCost()` restituisce costo nullo se la base ha prezzi mancanti (`c.manc`) o se le ricette si contengono a vicenda. Prima la ricetta che la usava risultava "OK" con costo sottostimato. Nessuna ricetta vera usava basi: risultati identici sulle 105 ricette e sui 109 fogli Excel.

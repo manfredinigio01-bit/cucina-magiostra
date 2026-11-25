@@ -2,7 +2,7 @@
    Dati: repository GitHub PRIVATO (ricettario.json), copia locale CIFRATA con la password (AES-GCM 256, chiave PBKDF2-SHA256).
    Nessuna dipendenza esterna a runtime: lib/ contiene fflate (zip) ed ExcelJS (xlsx), caricate da questo stesso sito. */
 'use strict';
-const APP_VERSION='1.4.0';
+const APP_VERSION='1.4.1';
 const DEF_REPO='manfredinigio01-bit/magiostra-cucina-dati';
 const ETI_REPO='manfredinigio01-bit/etichette-magiostra-dati';
 const DATA_FILE='ricettario.json';
@@ -116,6 +116,7 @@ function orarioFissi(P){ const h=P.settimaneMese*P.giorniSettimana*P.oreGiorno; 
 function baseCost(id,stack){
   const b=getR(id); if(!b||b.deleted||stack.has(id)) return {u:null,b};
   const c=calc(b,{stack:new Set([...stack,id])});
+  if(c.manc) return {u:null,b}; // base con prezzi mancanti (o ricette che si contengono a vicenda): il costo non è affidabile
   if(c.ckg!=null) return {u:c.ckg,b,full:true};
   const kgFin=c.peso*(1-(b.perdita||0));
   return {u:kgFin>0&&!c.manc?c.costo/kgFin:null,b,full:false};

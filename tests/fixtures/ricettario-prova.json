@@ -1,0 +1,22 @@
+{
+ "version": 1, "updatedAt": 1000,
+ "parametri": {"costoOrario":18,"energiaOra":5,"affittoMese":400,"settimaneMese":4,"giorniSettimana":5,"oreGiorno":6,"quotaAffitto":0.5,"iva":0.1,"ricaricoDef":0.7,"packagingDef":0.5,"altriFissiMese":230,"note":{},"updatedAt":1000},
+ "ingredienti": [
+  {"id":"i-farina","nome":"Farina di prova","fornitore":"Mulino Prova","prezzo":12,"formato":10,"unita":"kg","updatedAt":1000},
+  {"id":"i-olio","nome":"Olio di prova","fornitore":"Frantoio Prova","prezzo":8,"formato":1,"unita":"kg","updatedAt":1000},
+  {"id":"i-uova","nome":"Uova di prova","fornitore":"Cascina Prova","prezzo":3,"formato":6,"unita":"pz","pesoPezzo":0.06,"updatedAt":1000},
+  {"id":"i-senzaprezzo","nome":"Spezia senza prezzo","fornitore":"","prezzo":null,"formato":null,"unita":"kg","updatedAt":1000}
+ ],
+ "packaging": [{"id":"p-vaschetta","nome":"Vaschetta di prova","fornitore":"","prezzo":10,"pezzi":100,"updatedAt":1000}],
+ "ricette": [
+  {"id":"r-base","nome":"Impasto base","categoria":"Prova","unita":"kg","righe":[{"ing":"i-farina","nome":"Farina di prova","dose":0.5},{"ing":"i-olio","nome":"Olio di prova","dose":0.1}],"lotto":10,"tProd":60,"tCott":30,"perdita":0.1,"prezzoBanco":1.8,"unitaBanco":"€/etto","vendita":"kg","updatedAt":1000},
+  {"id":"r-pezzo","nome":"Torta a pezzo","categoria":"Prova","unita":"pz","righe":[{"ing":"i-farina","nome":"Farina di prova","dose":0.5},{"ing":"i-olio","nome":"Olio di prova","dose":0.1}],"lotto":10,"tProd":60,"tCott":30,"perdita":0.1,"confezione":300,"packaging":"p-vaschetta","pezziPack":1,"prezzoBanco":3.5,"unitaBanco":"€/pz","vendita":"pezzo","updatedAt":1000},
+  {"id":"r-composta","nome":"Ricetta con base","categoria":"Prova","unita":"kg","righe":[{"ric":"r-base","nome":"Base: Impasto base","dose":0.2},{"ing":"i-uova","nome":"Uova di prova","dose":2}],"lotto":5,"tProd":30,"tCott":0,"perdita":0,"vendita":"kg","updatedAt":1000},
+  {"id":"r-cicloA","nome":"Ciclo A","righe":[{"ric":"r-cicloB","nome":"Base: Ciclo B","dose":1}],"lotto":1,"tProd":10,"updatedAt":1000},
+  {"id":"r-cicloB","nome":"Ciclo B","righe":[{"ric":"r-cicloA","nome":"Base: Ciclo A","dose":1}],"lotto":1,"tProd":10,"updatedAt":1000},
+  {"id":"r-mancaprezzo","nome":"Con prezzo mancante","righe":[{"ing":"i-farina","nome":"Farina di prova","dose":1},{"ing":"i-senzaprezzo","nome":"Spezia senza prezzo","dose":0.01}],"lotto":1,"tProd":10,"updatedAt":1000},
+  {"id":"r-vuota","nome":"Ricetta vuota","righe":[],"updatedAt":1000},
+  {"id":"r-senzatempi","nome":"Senza tempi","righe":[{"ing":"i-farina","nome":"Farina di prova","dose":1}],"lotto":1,"updatedAt":1000}
+ ],
+ "archivio": [], "stagionalita": [{"nome":"Zucca","mesi":[8,9,10]}], "mappaFatture": [], "importati": [], "fornitori": []
+}
