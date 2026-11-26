@@ -73,12 +73,12 @@ Fatture FatturaPA .xml/.p7m/.zip (prezzo netto = PrezzoTotale/Quantita; TD04/TD0
 - Nella `composizione` degli ingredienti gli asterischi (sulle confezioni = biologico) vengono tolti dal testo dell'etichetta, con avviso nella scheda.
 - 26/11 sui dati veri: 31 ricette collegate, solo 1 con testo identico (Insalata russa); le altre vanno riviste una per una.
 
-## Comodità (PROVA 1.5.3, 26/11/2026)
+## Comodità (1.5.3, 26/11/2026, promossa con la 1.5.4)
 - Aggiornamenti: `checkUpdate()` gira all'apertura (anche sulla schermata della password), ogni 5 minuti e quando l'app torna in primo piano; mostra la barra gialla `#updbar` in cima ("Aggiorna ora"). Prima era un pulsantino nell'intestazione aggiunto solo dopo lo sblocco.
 - "Ricorda questo computer per 30 giorni" (casella nella schermata della password, scelta di Giovanni per il suo Mac): la `CryptoKey` (non esportabile) va in IndexedDB `ricorda` {key, scade}; all'avvio `ricordaApri()` apre senza password; con `RICORDATO` il blocco dopo 30 minuti non scatta. "Dimentica questo computer" in Impostazioni → Sicurezza. Cambio password: la chiave ricordata viene aggiornata. Scollega: cancellata. Chi usa quel computer con quell'account apre la Cucina: da NON attivare sui PC del negozio.
 - Collegare un'etichetta: niente più menu a tendina; `etiPicker`/`etiCerca` = campo di ricerca (tutte le parole, accenti ignorati) con risultati scorrevoli, Invio sceglie il primo; senza testo prima quelle col nome più simile alla ricetta; segnala "già collegata a…". Pulsanti Cambia / Scollega.
 
-## Interfaccia (PROVA 1.5.4, 26/11/2026, dopo revisione UI)
+## Interfaccia (1.5.4, 26/11/2026, dopo revisione UI; promossa il 26/11 con le Etichette 0.8.3)
 - Menu: `nav button{flex:0 0 auto}` (con `*{min-width:0}` le voci si schiacciavano e si sovrapponevano sotto i 700 px).
 - Modifica ricetta: barra `.savebar` fissa in basso (Salva/Annulla); su telefono `.card:has(.savebar){overflow:visible}` altrimenti lo sticky non funziona.
 - Telefono: colonne `.hm` nascoste (€/unità, Fornitore nella scheda; Costo pieno, Ipotetico, Ricarico reale nel Quadro); pulsanti ≥40 px.
