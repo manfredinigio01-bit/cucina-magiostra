@@ -16,8 +16,11 @@ function render(){
 }
 function afterRender(){ const q=document.getElementById('q'); if(q&&render.focusQ){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); render.focusQ=false; } }
 async function checkUpdate(){
-  try{ const r=await fetch('version.json',{cache:'no-store'}); const j=await r.json();
-    if(j.version&&j.version!==APP_VERSION&&!document.getElementById('upd')){ const b=document.createElement('button'); b.id='upd'; b.className='b sm'; b.textContent='Aggiorna app ('+j.version+')'; b.dataset.act='aggiorna'; $('#hdr').insertBefore(b,$('#nav')); }
+  try{ const r=await fetch('version.json?'+Date.now(),{cache:'no-store'}); const j=await r.json();
+    if(!j.version||j.version===APP_VERSION) return;
+    let bar=document.getElementById('updbar');
+    if(!bar){ bar=document.createElement('div'); bar.id='updbar'; document.body.prepend(bar); }
+    bar.innerHTML=`È pronta la versione <b>${esc(j.version)}</b>${j.note?' — '+esc(j.note):''} <button class="b sm p" data-act="aggiorna">Aggiorna ora</button>`;
   }catch(e){}
 }
 
@@ -29,6 +32,21 @@ function dialog(title,body,buttons){ // buttons: [[label,act,cls]]
 const closeDlg=()=>{ const d=$('#dlg'); if(d.open) d.close(); };
 
 /* ===================== QUADRO ===================== */
+/* scelta dell'etichetta da collegare: ricerca mentre scrivi, risultati scorrevoli */
+function etiCerca(r,q){
+  const L=etiLinks? etiLinks():new Map(), n=norm(q||''), parole=n.split(/\s+/).filter(Boolean);
+  const rn=norm(r.nome).split(/\s+/).filter(w=>w.length>3);
+  const P=ETI.prodotti.filter(p=>!p.deleted&&p.id!==r.etichetta).map(p=>{ const t=norm(p.nome+' '+(p.sottotitolo||''));
+    let s; if(parole.length){ if(!parole.every(w=>t.includes(w))) return null; s=(t.startsWith(n)?100:0)+(t.split(/\s+/).some(w=>w.startsWith(parole[0]))?50:0)-t.length/100; }
+    else { s=rn.filter(w=>t.includes(w)).length*10-t.length/100; }
+    return {p,s}; }).filter(Boolean).sort((a,b)=>b.s-a.s||a.p.nome.localeCompare(b.p.nome,'it'));
+  return P.map(({p})=>{ const altre=(L.get(p.id)||[]).filter(x=>x.id!==r.id); return `<button type="button" data-act="etilink:${p.id}">${esc(p.nome)}${p.sottotitolo?`<small>${esc(p.sottotitolo)}</small>`:''}${altre.length?`<small>· già collegata a ${esc(altre[0].nome)}</small>`:''}</button>`; }).join('')||'<p class="small mut" style="padding:8px 12px;margin:0">Nessuna etichetta con queste parole.</p>';
+}
+function etiPicker(r,et){
+  return `<div class="etipick">${et?`<div class="cur"><span class="small">Collegata a: <b>${esc(et.nome)}</b></span><button class="b sm" data-act="etipickopen">Cambia</button><button class="b sm" data-act="etiunlink">Scollega</button></div>`:''}
+   <div id="etipickbox" ${et?'class="hidden"':''}><input class="i" id="etiq" placeholder="Cerca l'etichetta da collegare (es. ${esc(r.nome.split(' ')[0].toLowerCase())})…" autocomplete="off">
+   <div class="etires" id="etires">${etiCerca(r,'')}</div><p class="small mut" style="margin:4px 0 0">Senza scrivere: prima quelle col nome più simile alla ricetta.</p></div></div>`;
+}
 const STAG=['inverno','inverno','primavera','primavera','primavera','estate','estate','estate','autunno','autunno','autunno','inverno'];
 function monthsSince(s){ if(!s) return null; const d=new Date(s); if(isNaN(d)) return null; const n=new Date(); return (n.getFullYear()-d.getFullYear())*12+(n.getMonth()-d.getMonth()); }
 function vQuadro(){

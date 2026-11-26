@@ -1,13 +1,23 @@
 'use strict';
 /* ===================== BLOCCO / PRIMO AVVIO ===================== */
 let lockT=null;
-function armLock(){ clearTimeout(lockT); lockT=setTimeout(lockNow,LOCK_MIN*60000); }
+function armLock(){ clearTimeout(lockT); if(RICORDATO) return; lockT=setTimeout(lockNow,LOCK_MIN*60000); }
 ['pointerdown','keydown','wheel','touchstart'].forEach(ev=>addEventListener(ev,()=>{ if(KEY) armLock(); },{passive:true}));
 async function lockNow(){ if(dirty){ try{ await saveLocal(); }catch(e){} } KEY=null; CFG=null; S=null; location.reload(); }
 function failDelay(){ const f=+(localStorage.getItem(PFX+'cuc_fail')||0); return f<3?0:Math.min(300,2**(f-2)); }
 
+const RICORDA_GG=30; let RICORDATO=false;
+async function ricordaSalva(){ if($('#rem')&&$('#rem').checked){ await kvSet('ricorda',{key:KEY,scade:now()+RICORDA_GG*864e5}); RICORDATO=true; } }
+async function ricordaApri(vault){ // apertura senza password con la chiave conservata (non esportabile) di questo computer
+  const r=await kvGet('ricorda'); if(!r||!r.key||!(r.scade>now())){ if(r) await kvDel('ricorda'); return false; }
+  try{ CFG=await unseal(r.key,vault.box); KEY=r.key; }catch(e){ await kvDel('ricorda'); CFG=null; return false; }
+  RICORDATO=true; const c=await kvGet('cache');
+  try{ S=c?sanitize(await unseal(KEY,c)):emptyData(); }catch(e){ S=emptyData(); }
+  reindex(); await start(); return true;
+}
 async function showLock(){
   const vault=await kvGet('vault');
+  if(vault&&await ricordaApri(vault)) return;
   const box=$('#lockbox');
   if(!vault){
     box.innerHTML=`<img src="icons/icon-192.png" alt=""><h2>Cucina La Magiostra</h2>
@@ -22,6 +32,7 @@ async function showLock(){
   } else {
     box.innerHTML=`<img src="icons/icon-192.png" alt=""><h2>Cucina La Magiostra</h2><p class="mut small">App protetta. Inserisci la password.</p>
     <label class="f">Password<input class="i" id="pw" type="password" autocomplete="current-password"></label>
+    <label class="row small" style="margin-top:10px;gap:8px;align-items:flex-start"><input type="checkbox" id="rem"> <span><b>Ricorda questo computer per ${RICORDA_GG} giorni</b>: non chiede più la password. Solo sul tuo computer personale, protetto dal suo accesso (Touch ID / password del Mac). Mai sui PC del negozio.</span></label>
     <div class="row"><button class="b p" data-act="unlock">Apri</button></div><div id="lmsg"></div>
     <p class="small mut" style="margin-top:18px">Password dimenticata? Su questo computer si può solo <a href="#" data-act="reset">cancellare l'accesso</a> e ricollegarlo con la chiave GitHub: i dati restano al sicuro nell'archivio online.</p>`;
     $('#pw').focus();
@@ -62,6 +73,7 @@ async function doUnlock(){
     return lmsg('Password sbagliata.');
   }
   localStorage.removeItem(PFX+'cuc_fail');
+  await ricordaSalva();
   const c=await kvGet('cache');
   try{ S=c?sanitize(await unseal(KEY,c)):emptyData(); }catch(e){ S=emptyData(); }
   reindex();
@@ -69,7 +81,7 @@ async function doUnlock(){
 }
 async function doReset(){
   if(!confirm('Cancello da questo computer la chiave e la copia locale dei dati. I dati online NON vengono toccati. Poi potrai ricollegarti con la chiave GitHub e una nuova password. Procedo?')) return;
-  await kvDel('vault'); await kvDel('cache'); await kvDel('dir'); location.reload();
+  await kvDel('vault'); await kvDel('cache'); await kvDel('dir'); await kvDel('ricorda'); location.reload();
 }
 async function start(){
   $('#lock').classList.add('hidden'); $('#hdr').classList.remove('hidden'); $('#main').classList.remove('hidden');
@@ -78,6 +90,5 @@ async function start(){
   setInterval(()=>{ if(KEY&&!EDIT) sync(); },30000);
   addEventListener('online',()=>sync());
   dirInit();
-  checkUpdate(); setInterval(checkUpdate,10*60000);
 }
 

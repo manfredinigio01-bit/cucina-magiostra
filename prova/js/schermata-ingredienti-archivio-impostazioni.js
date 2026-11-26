@@ -86,7 +86,8 @@ function vImpostazioni(){
    <div class="card"><h2>Cartella Drive e file</h2>${dirBox()}</div>
    <div class="card"><h2>Sicurezza</h2>
     <p class="small">Questo computer: <b>${esc(CFG.nome||'senza nome')}</b> · archivio <b>${esc(CFG.repo)}</b>. L'app si blocca dopo ${LOCK_MIN} minuti senza uso. Chiave e copia locale sono cifrate con la tua password.</p>
-    <div class="row"><button class="b" data-act="blocca">Blocca adesso</button><button class="b" data-act="cambiapw">Cambia password</button><button class="b d" data-act="reset">Scollega questo computer</button></div>
+    ${RICORDATO?'<p class="small ok">🔓 Questo computer è ricordato: si apre senza password e non si blocca da solo. "Dimentica questo computer" torna a chiedere la password.</p>':''}
+    <div class="row">${RICORDATO?'<button class="b" data-act="dimentica">Dimentica questo computer</button>':''}<button class="b" data-act="blocca">Blocca adesso</button><button class="b" data-act="cambiapw">Cambia password</button><button class="b d" data-act="reset">Scollega questo computer</button></div>
     <p class="small mut" style="margin-top:10px">App Cucina v${APP_VERSION}${lastSync?' · ultima sincronizzazione '+lastSync.toLocaleTimeString('it-IT'):''}</p></div>
    </div></div>`;
 }

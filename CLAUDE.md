@@ -72,3 +72,8 @@ Fatture FatturaPA .xml/.p7m/.zip (prezzo netto = PrezzoTotale/Quantita; TD04/TD0
 - Un prodotto collegato a più ricette non può essere automatico (`etiStato` = 'doppia').
 - Nella `composizione` degli ingredienti gli asterischi (sulle confezioni = biologico) vengono tolti dal testo dell'etichetta, con avviso nella scheda.
 - 26/11 sui dati veri: 31 ricette collegate, solo 1 con testo identico (Insalata russa); le altre vanno riviste una per una.
+
+## Comodità (PROVA 1.5.3, 26/11/2026)
+- Aggiornamenti: `checkUpdate()` gira all'apertura (anche sulla schermata della password), ogni 5 minuti e quando l'app torna in primo piano; mostra la barra gialla `#updbar` in cima ("Aggiorna ora"). Prima era un pulsantino nell'intestazione aggiunto solo dopo lo sblocco.
+- "Ricorda questo computer per 30 giorni" (casella nella schermata della password, scelta di Giovanni per il suo Mac): la `CryptoKey` (non esportabile) va in IndexedDB `ricorda` {key, scade}; all'avvio `ricordaApri()` apre senza password; con `RICORDATO` il blocco dopo 30 minuti non scatta. "Dimentica questo computer" in Impostazioni → Sicurezza. Cambio password: la chiave ricordata viene aggiornata. Scollega: cancellata. Chi usa quel computer con quell'account apre la Cucina: da NON attivare sui PC del negozio.
+- Collegare un'etichetta: niente più menu a tendina; `etiPicker`/`etiCerca` = campo di ricerca (tutte le parole, accenti ignorati) con risultati scorrevoli, Invio sceglie il primo; senza testo prima quelle col nome più simile alla ricetta; segnala "già collegata a…". Pulsanti Cambia / Scollega.
