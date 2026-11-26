@@ -65,3 +65,10 @@ Fatture FatturaPA .xml/.p7m/.zip (prezzo netto = PrezzoTotale/Quantita; TD04/TD0
 - Ingrediente: `surgelato` (bool), `nomeEtichetta` (nome in etichetta se diverso), `composizione` (ingredienti del prodotto composto, es. margarina; solo per l'etichetta, mai nel ricettario). In `sanitize`.
 - `etiRighe(r)` / `etiTesto(r)`: testo ingredienti in ordine di peso; riga base (`ric`) → "nome base (suoi ingredienti)" ricorsivo con protezione dai cicli (dal nome della base si tolgono le parentesi); ingrediente composto → "nome (composizione)"; surgelato → "nome*". `warn` = ingredienti che sembrano composti (`COMPOSTI_PROB`) senza composizione.
 - L'asterisco attaccato alla parola è il segno di "surgelato" nell'app etichette dalla PROVA 0.8.1, che aggiunge da sola "*Ingrediente surgelato.". L'app etichette 0.7.1 (normale) legge due asterischi come grassetto: promuovere le due prove insieme.
+
+## Etichette automatiche (PROVA 1.5.2, 26/11/2026)
+- Prodotto dell'archivio etichette con `fonte:'cucina'` + `ricetta:<id>` = testo ingredienti gestito dalla Cucina. Dopo ogni sincronizzazione riuscita `etiAutoMaybe()` (solo se i testi generati sono cambiati, o ogni 5 min) → `etiAuto()`: rilegge l'archivio etichette, e per ogni prodotto automatico con testo diverso da `etiTesto(r).txt` lo riscrive (`ingAt`=`updatedAt` monotono, `updatedBy` 'App Cucina (automatico)'), un solo commit, merge su sha (`etiApply`). In prova non scrive (toast "avrei aggiornato").
+- Si diventa automatici solo per scelta: "Rendi automatica…" nella scheda ricetta (dialogo con testo attuale e testo generato), "Rendile automatiche" nel Quadro per quelle già uguali, oppure etichetta nuova creata dalla Cucina col testo generato. "Rendi manuale" / "Modifica a mano" (app etichette) → `fonte:''`, la Cucina non la tocca più.
+- Un prodotto collegato a più ricette non può essere automatico (`etiStato` = 'doppia').
+- Nella `composizione` degli ingredienti gli asterischi (sulle confezioni = biologico) vengono tolti dal testo dell'etichetta, con avviso nella scheda.
+- 26/11 sui dati veri: 31 ricette collegate, solo 1 con testo identico (Insalata russa); le altre vanno riviste una per una.

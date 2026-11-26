@@ -82,6 +82,10 @@ document.addEventListener('click',async e=>{
     case 'etinuova': return etiWrite(getR(SEL));
     case 'etiord': $('#e_ing').value=etiWrite.txt; return;
     case 'etisave': return etiSave(getR(SEL));
+    case 'etiauto': return etiAutoDlg(getR(SEL));
+    case 'etiautook': return etiRendiAuto(ETIAUTO_R);
+    case 'etiman': return etiRendiManuale(getR(SEL));
+    case 'etiautouguali': return etiAutoUguali();
   }
 });
 document.addEventListener('change',e=>{

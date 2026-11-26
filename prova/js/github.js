@@ -36,7 +36,7 @@ async function sync(){
     }
     lastSync=new Date(); dirty=false;
     setStatus('Archivio ✓ '+lastSync.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}));
-    scheduleFiles();
+    scheduleFiles(); if(typeof etiAutoMaybe==='function') etiAutoMaybe();
   }catch(e){
     const off=!navigator.onLine||e instanceof TypeError;
     setStatus(off?'Senza rete: le modifiche partono appena torna la connessione':'Archivio: '+e.message,true);

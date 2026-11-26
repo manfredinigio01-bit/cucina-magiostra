@@ -74,10 +74,13 @@ function etiBox(r,et,c){
   const ord=c.righe.filter(z=>z.x.nome&&z.x.dose!=null).sort((a,b)=>b.x.dose*((b.i&&b.i.unita==='pz')?(b.i.pesoPezzo||0):1)-a.x.dose*((a.i&&a.i.unita==='pz')?(a.i.pesoPezzo||0):1)).map(z=>z.x.nome);
   let miss='';
   if(et){ const t=norm(et.ingredienti); const m=r.righe.filter(x=>x.nome&&!t.includes(norm(x.nome).split(' ')[0])).map(x=>x.nome); if(m.length) miss=`<div class="warn small">Nella ricetta ma forse non in etichetta: ${m.map(esc).join(', ')}</div>`; }
-  return `<div class="row"><select class="i flex1" id="etisel"><option value="">— nessuna etichetta collegata —</option>${opts.map(p=>`<option value="${p.id}" ${p.id===r.etichetta?'selected':''}>${esc(p.nome+(p.sottotitolo?' '+p.sottotitolo:''))}</option>`).join('')}</select></div>
-  ${et?`<p class="small" style="margin-top:8px"><b>Ingredienti in etichetta:</b> ${esc(et.ingredienti)}</p>${miss}`:''}
-  ${ord.length?`<p class="small mut">Testo per l'etichetta dalla ricetta (ordine per peso, semilavorati e composti con i loro ingredienti): ${esc(etiTesto(r).txt)}</p>`:''}
-  <div class="row"><button class="b sm" data-act="etinuova">${et?'Copia l\'ordine per peso nell\'etichetta…':'Crea l\'etichetta da questa ricetta…'}</button></div>`;
+  const sel=`<div class="row"><select class="i flex1" id="etisel"><option value="">— nessuna etichetta collegata —</option>${opts.map(p=>`<option value="${p.id}" ${p.id===r.etichetta?'selected':''}>${esc(p.nome+(p.sottotitolo?' '+p.sottotitolo:''))}</option>`).join('')}</select></div>`;
+  const s=etiStato(r), altre=s==='doppia'?(etiLinks().get(r.etichetta)||[]).filter(x=>x.id!==r.id):[];
+  return sel+`${et?`<p class="small" style="margin-top:8px"><b>Ingredienti in etichetta:</b> ${esc(et.ingredienti)}</p>`:''}
+  ${s==='auto'?`<p class="small ok">✓ Si aggiorna da sola: il testo lo scrive la Cucina a ogni modifica della ricetta, dei semilavorati o degli ingredienti.</p><div class="row"><button class="b sm" data-act="etiman">Rendi manuale</button></div>`
+   :`${miss}${ord.length?`<p class="small mut">Testo per l'etichetta dalla ricetta (ordine per peso, semilavorati e composti con i loro ingredienti): ${esc(etiTesto(r).txt)}</p>`:''}
+  ${s==='doppia'?`<div class="warn small">Questa etichetta è collegata anche a: ${altre.map(x=>esc(x.nome)).join(', ')}. Può aggiornarsi da sola solo se segue una ricetta: crea un'etichetta per ciascuna.</div>`:''}
+  <div class="row">${s==='manuale'&&ord.length?'<button class="b sm p" data-act="etiauto">Rendi automatica…</button>':''}<button class="b sm" data-act="etinuova">${et?'Scrivi il testo a mano…':'Crea l\'etichetta da questa ricetta…'}</button></div>`}`;
 }
 function ricEdit(){
   const r=EDIT; const names=ings().map(i=>i.nome);
