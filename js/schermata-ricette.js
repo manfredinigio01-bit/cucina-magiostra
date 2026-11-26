@@ -13,7 +13,7 @@ function vRicette(){
   const sel=EDIT&&EDIT.id===SEL?EDIT:SEL&&getR(SEL); // una ricetta nuova o duplicata non è ancora nell'archivio
   const fl=[['','Tutte'],['OK','Food cost OK'],['quasi','Manca un dato'],['Ricetta da inserire','Da inserire'],...CATS().map(c=>['cat:'+c,c])];
   return `<div class="split"><div>
-    <div class="row" style="margin-bottom:8px"><input class="i flex1" id="q" placeholder="Cerca ricetta o ingrediente" value="${esc(Q)}"><button class="b p" data-act="nuovaric">+ Nuova</button></div>
+    <div class="row" style="margin-bottom:8px"><input class="i flex1" id="q" placeholder="Cerca ricetta o ingrediente" aria-label="Cerca ricetta o ingrediente" type="search" value="${esc(Q)}"><button class="b p" data-act="nuovaric">+ Nuova</button></div>
     <div class="tabs2">${fl.map(([k,t])=>`<button class="${k===f?'on':''}" data-filt="ric:${esc(k)}">${esc(t)}</button>`).join('')}</div>
     <div class="list">${R.map(r=>{const c=C.get(r.id);return `<div class="it ${sel&&sel.id===r.id?'on':''}" data-ric="${r.id}"><div class="nm">${esc(r.nome)}<small>${esc(r.categoria)}${c.ckg!=null?' · '+eur(c.ckg)+'/kg':''}</small></div><span class="chip ${STATO_CL[c.stato]}">${c.stato==='OK'?'OK':esc(c.stato.replace(' mancanti','').replace('Ricetta da inserire','da inserire'))}</span></div>`}).join('')||'<div class="it mut">Nessuna ricetta</div>'}</div>
     <p class="small mut">${R.length} ricette</p>
@@ -42,9 +42,9 @@ function ricView(r){
       ${sim?'<button class="b sm" data-act="simreset">Torna al lotto standard</button><button class="b sm" data-act="simsalva">Salva come lotto standard</button>':''}
     </div>
     <p class="small mut">Lotto standard: ${fmt(r.lotto)||'–'} dosi, ${fmt(r.tProd)||0} min di lavoro, ${fmt(r.tCott)||0} min di cottura. Se cambi le dosi i minuti restano quelli del lotto standard: correggili qui se una produzione più grande richiede più tempo.</p>
-    <div class="scroll"><table class="t" style="margin-top:8px"><tr><th>Ingrediente</th><th class="n">1 dose</th><th class="n">Da usare (${fmt(c.dosi,2)} dosi)</th><th class="n">€/unità</th><th class="n">Costo</th><th>Fornitore</th></tr>
-    ${c.righe.filter(z=>z.x.nome).map(({x,i,u,base})=>{ const un=base?'kg':i?i.unita:''; const q=x.dose!=null?x.dose*c.dosi:null; return `<tr><td>${base?'<span class="chip g">base</span> ':''}${esc(x.nome)}${i&&i.surgelato?' <span class="chip g">surgelato</span>':''}${x.flag?' <span class="chip w">da verificare</span>':''}${!i&&!base?' <span class="chip r">non in elenco</span>':''}${base&&base.u!=null&&!base.full?' <span class="chip w">solo ingredienti</span>':''}</td><td class="n">${x.dose!=null?fmt(x.dose)+' '+esc(un):esc(x.doseTesto||'–')}</td><td class="n"><b>${qty(q,un)}</b></td><td class="n">${u!=null?eur3(u):'<span class="chip r">manca</span>'}</td><td class="n">${x.dose!=null&&u!=null?eur(x.dose*u*c.dosi):''}</td><td class="small mut">${esc(base?'ricetta base':i?i.fornitore:'')}</td></tr>`}).join('')}
-    <tr class="tot"><td>Impasto crudo · ingredienti</td><td class="n">${fmt(c.peso)} kg</td><td class="n">${qty(c.crudo,'kg')}</td><td></td><td class="n">${eur(c.cIng)}</td><td class="small">${c.manc?`<span class="chip r">${c.manc} prezzi mancanti</span>`:''}</td></tr></table></div>
+    <div class="scroll"><table class="t" style="margin-top:8px"><tr><th>Ingrediente</th><th class="n">1 dose</th><th class="n">Da usare (${fmt(c.dosi,2)} dosi)</th><th class="n hm">€/unità</th><th class="n">Costo</th><th class="hm">Fornitore</th></tr>
+    ${c.righe.filter(z=>z.x.nome).map(({x,i,u,base})=>{ const un=base?'kg':i?i.unita:''; const q=x.dose!=null?x.dose*c.dosi:null; return `<tr><td>${base?'<span class="chip g">base</span> ':''}${esc(x.nome)}${i&&i.surgelato?' <span class="chip g">surgelato</span>':''}${x.flag?' <span class="chip w">da verificare</span>':''}${!i&&!base?' <span class="chip r">non in elenco</span>':''}${base&&base.u!=null&&!base.full?' <span class="chip w">solo ingredienti</span>':''}</td><td class="n">${x.dose!=null?fmt(x.dose)+' '+esc(un):esc(x.doseTesto||'–')}</td><td class="n"><b>${qty(q,un)}</b></td><td class="n hm">${u!=null?eur3(u):'<span class="chip r">manca</span>'}</td><td class="n">${x.dose!=null&&u!=null?eur(x.dose*u*c.dosi):(u==null?'<span class="chip r">manca</span>':'')}</td><td class="small mut hm">${esc(base?'ricetta base':i?i.fornitore:'')}</td></tr>`}).join('')}
+    <tr class="tot"><td>Impasto crudo · ingredienti</td><td class="n">${fmt(c.peso)} kg</td><td class="n">${qty(c.crudo,'kg')}</td><td class="hm"></td><td class="n">${eur(c.cIng)}</td><td class="small hm">${c.manc?`<span class="chip r">${c.manc} prezzi mancanti</span>`:''}</td></tr></table></div>
     ${r.procedimento?`<h3>Procedimento</h3><div class="proc">${esc(r.procedimento)}</div>`:''}
     <h3>Food cost per ${fmt(c.dosi,2)} dosi${sim?' <span class="chip w">simulazione</span>':''}</h3>
     <div class="fc">
@@ -74,7 +74,7 @@ function etiBox(r,et,c){
   const ord=c.righe.filter(z=>z.x.nome&&z.x.dose!=null).sort((a,b)=>b.x.dose*((b.i&&b.i.unita==='pz')?(b.i.pesoPezzo||0):1)-a.x.dose*((a.i&&a.i.unita==='pz')?(a.i.pesoPezzo||0):1)).map(z=>z.x.nome);
   let miss='';
   if(et){ const t=norm(et.ingredienti); const m=r.righe.filter(x=>x.nome&&!t.includes(norm(x.nome).split(' ')[0])).map(x=>x.nome); if(m.length) miss=`<div class="warn small">Nella ricetta ma forse non in etichetta: ${m.map(esc).join(', ')}</div>`; }
-  const sel=`<div class="row"><select class="i flex1" id="etisel"><option value="">— nessuna etichetta collegata —</option>${opts.map(p=>`<option value="${p.id}" ${p.id===r.etichetta?'selected':''}>${esc(p.nome+(p.sottotitolo?' '+p.sottotitolo:''))}</option>`).join('')}</select></div>`;
+  const sel=etiPicker(r,et);
   const s=etiStato(r), altre=s==='doppia'?(etiLinks().get(r.etichetta)||[]).filter(x=>x.id!==r.id):[];
   return sel+`${et?`<p class="small" style="margin-top:8px"><b>Ingredienti in etichetta:</b> ${esc(et.ingredienti)}</p>`:''}
   ${s==='auto'?`<p class="small ok">✓ Si aggiorna da sola: il testo lo scrive la Cucina a ogni modifica della ricetta, dei semilavorati o degli ingredienti.</p><div class="row"><button class="b sm" data-act="etiman">Rendi manuale</button></div>`
@@ -91,7 +91,7 @@ function ricEdit(){
    <datalist id="inglist">${names.map(n=>`<option value="${esc(n)}">`).join('')}${basi.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
    <h3>Ingredienti per 1 dose (kg, litri o pezzi, come nell'elenco ingredienti)</h3><p class="small mut">Per usare una vostra preparazione (panna, besciamella, frolla…) scegli dall'elenco la voce che inizia con <b>${esc(BASE)}</b> e scrivi la dose in kg: il costo viene preso dal food cost di quella ricetta.</p>
    <div class="scroll"><table class="t"><tr><th>Ingrediente</th><th class="n">Dose</th><th>Unità</th><th></th></tr>
-   ${r.righe.map((x,k)=>{ const i=x.ric?{unita:'kg'}:INAME.get((x.nome||'').toLowerCase()); return `<tr><td><input class="i" list="inglist" data-row="${k}" data-f="nome" value="${esc((x.ric?BASE:'')+x.nome)}">${x.nome&&!i?'<div class="small" style="color:var(--r)">Non è nell\'elenco ingredienti: aggiungilo in "Ingredienti e prezzi" o scegli un nome dall\'elenco.</div>':''}</td><td class="n"><input class="i n" inputmode="decimal" data-row="${k}" data-f="dose" value="${x.dose!=null?fmt(x.dose,4):esc(x.doseTesto)}"></td><td class="mut">${i?esc(i.unita):''}</td><td><button class="b sm d" data-act="delriga:${k}">✕</button></td></tr>`}).join('')}
+   ${r.righe.map((x,k)=>{ const i=x.ric?{unita:'kg'}:INAME.get((x.nome||'').toLowerCase()); return `<tr><td><input class="i" list="inglist" data-row="${k}" data-f="nome" value="${esc((x.ric?BASE:'')+x.nome)}">${x.nome&&!i?'<div class="small" style="color:var(--r)">Non è nell\'elenco ingredienti: aggiungilo in "Ingredienti e prezzi" o scegli un nome dall\'elenco.</div>':''}</td><td class="n"><input class="i n" inputmode="decimal" data-row="${k}" data-f="dose" value="${x.dose!=null?fmt(x.dose,4):esc(x.doseTesto)}"></td><td class="mut u">${i?esc(i.unita):''}</td><td class="u"><button class="b sm d" data-act="delriga:${k}" aria-label="Togli ${esc(x.nome||'riga')}" title="Togli questa riga">✕</button></td></tr>`}).join('')}
    </table></div>
    <div class="row" style="margin-top:6px"><button class="b sm" data-act="addriga">+ Ingrediente</button></div>
    <h3>Procedimento</h3><textarea class="i" data-e="procedimento">${esc(r.procedimento)}</textarea>
@@ -105,11 +105,12 @@ function ricEdit(){
     <label class="f">Come lo vendi<select class="i" data-e="vendita"><option value="kg" ${r.vendita!=='pezzo'?'selected':''}>Solo al kg (prezzo al kg e all'etto)</option><option value="pezzo" ${r.vendita==='pezzo'?'selected':''}>Al kg e anche a pezzo / confezione</option></select></label><label class="f s">Pezzatura (g)<input class="i" inputmode="decimal" data-n="confezione" value="${fmt(r.confezione)}"></label>
     <label class="f">Packaging<select class="i" data-e="packaging"><option value="">predefinito (${eur(S.parametri.packagingDef)})</option>${packs().map(p=>`<option value="${p.id}" ${p.id===r.packaging?'selected':''}>${esc(p.nome)}</option>`).join('')}</select></label>
     <label class="f s">Pezzi packaging<input class="i" inputmode="decimal" data-n="pezziPack" value="${fmt(r.pezziPack)}"></label>
+   </div><div class="row" style="margin-top:8px">
     <label class="f s">Prezzo al banco €<input class="i" inputmode="decimal" data-n="prezzoBanco" value="${fmt(r.prezzoBanco,2)}"></label>
     <label class="f s">Unità prezzo<select class="i" data-e="unitaBanco">${['','€/etto','€/kg','€/pz','€/porzione'].map(u=>`<option ${u===r.unitaBanco?'selected':''}>${u}</option>`).join('')}</select></label>
    </div>
    <label class="f" style="margin-top:8px">Note<textarea class="i" style="min-height:60px" data-e="note">${esc(r.note)}</textarea></label>
-   <div class="row" style="margin-top:12px"><button class="b p" data-act="salvaric">Salva</button><button class="b" data-act="annullaric">Annulla</button></div>
+   <div class="savebar"><button class="b p" data-act="salvaric">Salva</button><button class="b" data-act="annullaric">Annulla</button><span class="small mut">Modifica in corso: ${esc(r.nome||'nuova ricetta')}</span></div>
   </div>`;
 }
 

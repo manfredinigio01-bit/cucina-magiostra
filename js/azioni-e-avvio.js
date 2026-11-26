@@ -27,7 +27,7 @@ async function pwSave(){
   const v=await kvGet('vault'); try{ await unseal(await deriveKey($('#pwo').value,unb64(v.salt),v.iter),v.box); }catch(e){ return m('Password attuale sbagliata.'); }
   const p1=$('#pwn1').value; if(p1.length<10) return m('Almeno 10 caratteri.'); if(p1!==$('#pwn2').value) return m('Le due password non coincidono.');
   const salt=crypto.getRandomValues(new Uint8Array(16)); KEY=await deriveKey(p1,salt,PBKDF2_ITER);
-  await kvSet('vault',{v:1,salt:b64(salt),iter:PBKDF2_ITER,box:await seal(KEY,CFG)}); await saveLocal(); closeDlg();
+  await kvSet('vault',{v:1,salt:b64(salt),iter:PBKDF2_ITER,box:await seal(KEY,CFG)}); await saveLocal(); if(RICORDATO){ const r=await kvGet('ricorda'); await kvSet('ricorda',{key:KEY,scade:(r&&r.scade)||now()+RICORDA_GG*864e5}); } closeDlg();
   alert('Password cambiata su questo computer. Sugli altri computer va cambiata anche lì (ognuno ha la sua copia cifrata).');
 }
 
@@ -44,6 +44,7 @@ document.addEventListener('click',async e=>{
     case 'unlock': return doUnlock();
     case 'reset': e.preventDefault(); return doReset();
     case 'blocca': return lockNow();
+    case 'dimentica': await kvDel('ricorda'); RICORDATO=false; return lockNow();
     case 'cambiapw': return pwDialog();
     case 'pwsave': return pwSave();
     case 'aggiorna': if('serviceWorker' in navigator){ const rg=await navigator.serviceWorker.getRegistration(); if(rg) await rg.update(); } location.reload(); return;
@@ -86,6 +87,9 @@ document.addEventListener('click',async e=>{
     case 'etiautook': return etiRendiAuto(ETIAUTO_R);
     case 'etiman': return etiRendiManuale(getR(SEL));
     case 'etiautouguali': return etiAutoUguali();
+    case 'etilink': { const r=getR(SEL); r.etichetta=arg; touch(r); commit(); toast('Etichetta collegata'); return render(); }
+    case 'etiunlink': { if(!confirm('Scollego l\'etichetta da questa ricetta? L\'etichetta resta nell\'app etichette.')) return; const r=getR(SEL); r.etichetta=''; touch(r); commit(); return render(); }
+    case 'etipickopen': { $('#etipickbox').classList.remove('hidden'); $('#etiq').focus(); return; }
   }
 });
 document.addEventListener('change',e=>{
@@ -103,8 +107,8 @@ document.addEventListener('change',e=>{
     if(t.id==='sim_d'){ MOLT.d=v>0?v:null; MOLT.kg=null; } else if(t.id==='sim_kg'){ MOLT.kg=v>0?v:null; MOLT.d=null; } else if(t.id==='sim_tp') MOLT.tp=v!=null&&v>=0?v:null; else MOLT.tc=v!=null&&v>=0?v:null;
     return render(); }
 });
-document.addEventListener('input',e=>{ if(e.target.id==='q'){ Q=e.target.value; render.focusQ=true; clearTimeout(render.qt); render.qt=setTimeout(render,180); } });
-document.addEventListener('keydown',e=>{ if(e.key==='Enter'){ if(e.target.id==='pw') doUnlock(); if(e.target.id==='nome'&&$('#pw1')) doSetup(); } });
+document.addEventListener('input',e=>{ if(e.target.id==='etiq'){ const r=getR(SEL); if(r&&ETI) $('#etires').innerHTML=etiCerca(r,e.target.value); return; } if(e.target.id==='q'){ Q=e.target.value; render.focusQ=true; clearTimeout(render.qt); render.qt=setTimeout(render,180); } });
+document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][tabindex]')){ e.preventDefault(); e.target.click(); return; } if(e.key==='Enter'){ if(e.target.id==='etiq'){ e.preventDefault(); const b=document.querySelector('#etires button'); if(b) b.click(); return; } if(e.target.id==='pw') doUnlock(); if(e.target.id==='nome'&&$('#pw1')) doSetup(); } });
 document.addEventListener('dragover',e=>{ const d=$('#drop'); if(d){ e.preventDefault(); d.classList.add('on'); } });
 document.addEventListener('dragleave',e=>{ const d=$('#drop'); if(d&&e.target===d) d.classList.remove('on'); });
 document.addEventListener('drop',e=>{ const d=$('#drop'); if(!d) return; e.preventDefault(); d.classList.remove('on'); if(e.dataTransfer.files.length) readFiles([...e.dataTransfer.files]); });
@@ -112,5 +116,7 @@ addEventListener('beforeunload',e=>{ if(EDIT){ e.preventDefault(); e.returnValue
 
 /* ===================== AVVIO ===================== */
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+checkUpdate(); setInterval(checkUpdate,5*60000);
+addEventListener('focus',checkUpdate); document.addEventListener('visibilitychange',()=>{ if(!document.hidden) checkUpdate(); });
 showLock();
 
