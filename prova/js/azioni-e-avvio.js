@@ -108,7 +108,7 @@ document.addEventListener('change',e=>{
     return render(); }
 });
 document.addEventListener('input',e=>{ if(e.target.id==='etiq'){ const r=getR(SEL); if(r&&ETI) $('#etires').innerHTML=etiCerca(r,e.target.value); return; } if(e.target.id==='q'){ Q=e.target.value; render.focusQ=true; clearTimeout(render.qt); render.qt=setTimeout(render,180); } });
-document.addEventListener('keydown',e=>{ if(e.key==='Enter'){ if(e.target.id==='etiq'){ e.preventDefault(); const b=document.querySelector('#etires button'); if(b) b.click(); return; } if(e.target.id==='pw') doUnlock(); if(e.target.id==='nome'&&$('#pw1')) doSetup(); } });
+document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][tabindex]')){ e.preventDefault(); e.target.click(); return; } if(e.key==='Enter'){ if(e.target.id==='etiq'){ e.preventDefault(); const b=document.querySelector('#etires button'); if(b) b.click(); return; } if(e.target.id==='pw') doUnlock(); if(e.target.id==='nome'&&$('#pw1')) doSetup(); } });
 document.addEventListener('dragover',e=>{ const d=$('#drop'); if(d){ e.preventDefault(); d.classList.add('on'); } });
 document.addEventListener('dragleave',e=>{ const d=$('#drop'); if(d&&e.target===d) d.classList.remove('on'); });
 document.addEventListener('drop',e=>{ const d=$('#drop'); if(!d) return; e.preventDefault(); d.classList.remove('on'); if(e.dataTransfer.files.length) readFiles([...e.dataTransfer.files]); });

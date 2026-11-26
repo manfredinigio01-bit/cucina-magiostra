@@ -14,7 +14,8 @@ function render(){
   finally{ render.busy=false; }
   afterRender();
 }
-function afterRender(){ const q=document.getElementById('q'); if(q&&render.focusQ){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); render.focusQ=false; } }
+function afterRender(){ document.querySelectorAll('#main td input,#main td select').forEach(e=>{ if(e.labels&&e.labels.length||e.getAttribute('aria-label')) return; const td=e.closest('td'), tb=e.closest('table'); const th=tb&&tb.rows[0]&&tb.rows[0].cells[td.cellIndex]; if(th&&th.textContent.trim()) e.setAttribute('aria-label',th.textContent.trim()); });
+  document.querySelectorAll('#main [data-ric]:not(button):not(a),#main [data-ing]:not(button),#main [data-go]:not(button),#main [data-filt]:not(button)').forEach(e=>{ if(!e.hasAttribute('tabindex')){ e.tabIndex=0; e.setAttribute('role','button'); } }); const q=document.getElementById('q'); if(q&&render.focusQ){ q.focus(); q.setSelectionRange(q.value.length,q.value.length); render.focusQ=false; } }
 async function checkUpdate(){
   try{ const r=await fetch('version.json?'+Date.now(),{cache:'no-store'}); const j=await r.json();
     if(!j.version||j.version===APP_VERSION) return;
@@ -26,7 +27,7 @@ async function checkUpdate(){
 
 /* ===================== DIALOGO ===================== */
 function dialog(title,body,buttons){ // buttons: [[label,act,cls]]
-  const d=$('#dlg'); d.innerHTML=`<div class="dh"><h3>${esc(title)}</h3><button class="b sm" data-act="dlgclose">✕</button></div><div class="db">${body}</div><div class="df">${(buttons||[]).map(([l,a,c])=>`<button class="b ${c||''}" data-act="${a}">${esc(l)}</button>`).join('')}</div>`;
+  const d=$('#dlg'); d.innerHTML=`<div class="dh"><h3>${esc(title)}</h3><button class="b sm" data-act="dlgclose" aria-label="Chiudi" title="Chiudi">✕</button></div><div class="db">${body}</div><div class="df">${(buttons||[]).map(([l,a,c])=>`<button class="b ${c||''}" data-act="${a}">${esc(l)}</button>`).join('')}</div>`;
   if(!d.open) d.showModal();
 }
 const closeDlg=()=>{ const d=$('#dlg'); if(d.open) d.close(); };
@@ -44,7 +45,7 @@ function etiCerca(r,q){
 }
 function etiPicker(r,et){
   return `<div class="etipick">${et?`<div class="cur"><span class="small">Collegata a: <b>${esc(et.nome)}</b></span><button class="b sm" data-act="etipickopen">Cambia</button><button class="b sm" data-act="etiunlink">Scollega</button></div>`:''}
-   <div id="etipickbox" ${et?'class="hidden"':''}><input class="i" id="etiq" placeholder="Cerca l'etichetta da collegare (es. ${esc(r.nome.split(' ')[0].toLowerCase())})…" autocomplete="off">
+   <div id="etipickbox" ${et?'class="hidden"':''}><input class="i" id="etiq" type="search" aria-label="Cerca etichetta da collegare" placeholder="Cerca l'etichetta da collegare (es. ${esc(r.nome.split(' ')[0].toLowerCase())})…" autocomplete="off">
    <div class="etires" id="etires">${etiCerca(r,'')}</div><p class="small mut" style="margin:4px 0 0">Senza scrivere: prima quelle col nome più simile alla ricetta.</p></div></div>`;
 }
 const STAG=['inverno','inverno','primavera','primavera','primavera','estate','estate','estate','autunno','autunno','autunno','inverno'];
@@ -72,8 +73,8 @@ function vQuadro(){
   </div>
   <div class="card"><h2>Margine reale al banco, prodotto per prodotto</h2>
    <p class="small">${MB.length} prodotti con food cost completo e prezzo al banco: <span class="chip r">${nPerd} in perdita</span> <span class="chip w">${nSotto} sotto il ricarico del ${pct(rif)}</span> <span class="chip ok">${MB.length-nPerd-nSotto} in linea o sopra</span></p>
-   ${MB.length?`<div class="scroll" style="max-height:460px"><table class="t"><tr><th>Prodotto</th><th class="n">Costo pieno</th><th class="n">Ipotetico ${pct(rif)}</th><th class="n">Banco</th><th class="n">Margine (senza IVA)</th><th class="n">% sul prezzo</th><th class="n">Ricarico reale</th></tr>
-   ${MB.map(([r,c])=>{ const b=c.banco, u=b.u==='kg'?'/kg':'/pz', cl=b.marg<0?'r':b.ric<rif-0.05?'w':'ok'; return `<tr data-ric="${r.id}" style="cursor:pointer"><td>${esc(r.nome)}</td><td class="n">${eur(b.costo)}${u}</td><td class="n">${eur(b.ipo)}${u}</td><td class="n">${esc(banco(r))}</td><td class="n"><span class="chip ${cl}">${eur(b.marg)}${u}</span></td><td class="n">${pct(b.margPct)}</td><td class="n">${pct(b.ric)}</td></tr>`}).join('')}</table></div>`:'<p class="mut">Nessun prodotto con food cost completo e prezzo al banco.</p>'}
+   ${MB.length?`<div class="scroll" style="max-height:460px"><table class="t"><tr><th>Prodotto</th><th class="n hm">Costo pieno</th><th class="n hm">Ipotetico ${pct(rif)}</th><th class="n">Banco</th><th class="n">Margine (senza IVA)</th><th class="n">% sul prezzo</th><th class="n hm">Ricarico reale</th></tr>
+   ${MB.map(([r,c])=>{ const b=c.banco, u=b.u==='kg'?'/kg':'/pz', cl=b.marg<0?'r':b.ric<rif-0.05?'w':'ok'; return `<tr data-ric="${r.id}" style="cursor:pointer"><td>${esc(r.nome)}</td><td class="n hm">${eur(b.costo)}${u}</td><td class="n hm">${eur(b.ipo)}${u}</td><td class="n">${esc(banco(r))}</td><td class="n"><span class="chip ${cl}">${eur(b.marg)}${u}</span></td><td class="n">${pct(b.margPct)}</td><td class="n hm">${pct(b.ric)}</td></tr>`}).join('')}</table></div>`:'<p class="mut">Nessun prodotto con food cost completo e prezzo al banco.</p>'}
    <p class="small mut">Dal margine più basso. Costo pieno = ingredienti + lavoro + energia + affitto e fissi della cucina (a pezzo anche il packaging). Margine = prezzo al banco senza IVA − costo pieno. Ipotetico = costo pieno + ricarico ${pct(rif)} + IVA.${noMB?` ${noMB} prodotti hanno un prezzo al banco ma non compaiono: food cost incompleto, unità mancante o pezzatura mancante.`:''}</p></div>
   ${etiQuadroCard()}
   <div class="grid2">
