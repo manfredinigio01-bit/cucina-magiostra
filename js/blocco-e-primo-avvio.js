@@ -86,7 +86,7 @@ async function doReset(){
 async function start(){
   $('#lock').classList.add('hidden'); $('#hdr').classList.remove('hidden'); $('#main').classList.remove('hidden');
   armLock(); render(); setStatus('Sincronizzo…');
-  await sync(); loadEti().then(()=>{ if(!EDIT) render(); });
+  await sync(); loadEti().then(()=>{ etiAvvisoNuove(); etiModAvviso(); if(!EDIT) render(); });
   setInterval(()=>{ if(KEY&&!EDIT) sync(); },30000);
   addEventListener('online',()=>sync());
   dirInit();

@@ -63,7 +63,7 @@ function vQuadro(){
   const recenti=[]; I.forEach(i=>(i.storico||[]).forEach(s=>{ const m=monthsSince(s.data); if(m!=null&&m<=1&&s.prima&&s.prezzoUnit) recenti.push([i,s,s.prezzoUnit/s.prima-1]); }));
   recenti.sort((a,b)=>Math.abs(b[2])-Math.abs(a[2]));
   const k=(n,t,go)=>`<div class="kpi" data-go="${go}"><b>${n}</b><span>${t}</span></div>`;
-  return `<div class="kpis">
+  return `${etiModCard()}${etiNoRicCard()}<div class="kpis">
     ${k(R.length,'prodotti nel ricettario','ricette:')}
     ${k(cnt['OK']||0,'food cost completo','ricette:OK')}
     ${k((cnt['Tempi mancanti']||0)+(cnt['Prezzi mancanti']||0)+(cnt['Dosi mancanti']||0)+(cnt['Lotto mancante']||0),'quasi pronti (manca un dato)','ricette:quasi')}

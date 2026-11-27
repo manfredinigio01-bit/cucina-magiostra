@@ -7,7 +7,7 @@ let ETI=null;      // archivio etichette (sola lettura salvo azioni esplicite)
 let TAB='quadro', SEL=null, EDIT=null, Q='', FILT={};
 let dirty=false, syncing=false, pending=false, lastSync=null;
 
-function emptyData(){ return {version:1,updatedAt:0,parametri:{costoOrario:18,energiaOra:5,affittoMese:400,settimaneMese:4,giorniSettimana:5,oreGiorno:6,quotaAffitto:.5,iva:.1,ricaricoDef:.7,packagingDef:.5,altriFissiMese:230,note:{},updatedAt:0},ingredienti:[],packaging:[],ricette:[],archivio:[],stagionalita:[],mappaFatture:[],importati:[],fornitori:[]}; }
+function emptyData(){ return {version:1,updatedAt:0,parametri:{costoOrario:18,energiaOra:5,affittoMese:400,settimaneMese:4,giorniSettimana:5,oreGiorno:6,quotaAffitto:.5,iva:.1,ricaricoDef:.7,packagingDef:.5,altriFissiMese:230,note:{},updatedAt:0},ingredienti:[],packaging:[],ricette:[],archivio:[],stagionalita:[],mappaFatture:[],importati:[],fornitori:[],etiNoRic:[]}; }
 
 /* ===================== PULIZIA DATI ===================== */
 const str=(v,max=4000)=>String(v??'').slice(0,max);
@@ -34,6 +34,8 @@ function sanitize(D){
   o.mappaFatture=(Array.isArray(D.mappaFatture)?D.mappaFatture:[]).slice(0,8000).map(m=>({voce:str(m.voce,200),fornitore:str(m.fornitore,80),ing:m.ing&&ID_OK.test(m.ing)?m.ing:null,formato:nn(m.formato,0,1e5),negozio:!!m.negozio,updatedAt:nn(m.updatedAt,0)||0})).filter(m=>m.voce&&(m.ing||m.negozio));
   o.fornitori=(Array.isArray(D.fornitori)?D.fornitori:[]).slice(0,500).map(f=>({id:okid(f.id,'f-'),nome:str(f.nome,80).trim(),alias:(Array.isArray(f.alias)?f.alias:[]).slice(0,20).map(a=>str(a,60).trim()).filter(Boolean),regola:['cucina','negozio','misto'].includes(f.regola)?f.regola:'misto',updatedAt:nn(f.updatedAt,0)||0,deleted:!!f.deleted})).filter(f=>f.nome);
   o.importati=(Array.isArray(D.importati)?D.importati:[]).slice(-3000).map(x=>str(x,200));
+  // etichette dell'app etichette segnate "non serve ricetta" (id del prodotto etichetta); deleted = rimessa in elenco
+  o.etiNoRic=(Array.isArray(D.etiNoRic)?D.etiNoRic:[]).slice(0,5000).map(x=>({id:ID_OK.test(String(x&&x.id||''))?String(x.id):'',updatedAt:nn(x&&x.updatedAt,0)||0,deleted:!!(x&&x.deleted)})).filter(x=>x.id);
   o.updatedAt=nn(D.updatedAt,0)||0;
   return o;
 }
@@ -41,7 +43,7 @@ function mergeColl(a,b){ const m=new Map(); for(const x of a||[]) m.set(x.id,x);
 function merge(a,b){ // b = archivio online: a parità vince b
   const o=emptyData();
   o.parametri=(b.parametri.updatedAt||0)>=(a.parametri.updatedAt||0)?b.parametri:a.parametri;
-  for(const k of ['ingredienti','packaging','ricette','archivio','fornitori']) o[k]=mergeColl(a[k],b[k]);
+  for(const k of ['ingredienti','packaging','ricette','archivio','fornitori','etiNoRic']) o[k]=mergeColl(a[k],b[k]);
   o.stagionalita=b.stagionalita.length?b.stagionalita:a.stagionalita;
   const mk=x=>x.voce.toUpperCase()+'|'+x.fornitore.toUpperCase(); const mm=new Map();
   for(const x of a.mappaFatture) mm.set(mk(x),x); for(const y of b.mappaFatture){ const x=mm.get(mk(y)); if(!x||(y.updatedAt||0)>=(x.updatedAt||0)) mm.set(mk(y),y); }

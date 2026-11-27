@@ -87,6 +87,13 @@ document.addEventListener('click',async e=>{
     case 'etiautook': return etiRendiAuto(ETIAUTO_R);
     case 'etiman': return etiRendiManuale(getR(SEL));
     case 'etiautouguali': return etiAutoUguali();
+    case 'etimodviste': etiFotoSalva(); toast('Modifiche segnate come viste'); return render();
+    case 'etinrlink': return etiNoRicLinkDlg(arg);
+    case 'etinrpick': return etiNoRicPick(arg);
+    case 'etinrnew': closeDlg(); return etiNoRicNew(arg);
+    case 'etinrno': return etiNoRic(arg,true);
+    case 'etinrsi': return etiNoRic(arg,false);
+    case 'etinrtutte': etiNoRicCard.tutte=!etiNoRicCard.tutte; return render();
     case 'etilink': { const r=getR(SEL); r.etichetta=arg; touch(r); commit(); toast('Etichetta collegata'); return render(); }
     case 'etiunlink': { if(!confirm('Scollego l\'etichetta da questa ricetta? L\'etichetta resta nell\'app etichette.')) return; const r=getR(SEL); r.etichetta=''; touch(r); commit(); return render(); }
     case 'etipickopen': { $('#etipickbox').classList.remove('hidden'); $('#etiq').focus(); return; }
@@ -107,8 +114,8 @@ document.addEventListener('change',e=>{
     if(t.id==='sim_d'){ MOLT.d=v>0?v:null; MOLT.kg=null; } else if(t.id==='sim_kg'){ MOLT.kg=v>0?v:null; MOLT.d=null; } else if(t.id==='sim_tp') MOLT.tp=v!=null&&v>=0?v:null; else MOLT.tc=v!=null&&v>=0?v:null;
     return render(); }
 });
-document.addEventListener('input',e=>{ if(e.target.id==='etiq'){ const r=getR(SEL); if(r&&ETI) $('#etires').innerHTML=etiCerca(r,e.target.value); return; } if(e.target.id==='q'){ Q=e.target.value; render.focusQ=true; clearTimeout(render.qt); render.qt=setTimeout(render,180); } });
-document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][tabindex]')){ e.preventDefault(); e.target.click(); return; } if(e.key==='Enter'){ if(e.target.id==='etiq'){ e.preventDefault(); const b=document.querySelector('#etires button'); if(b) b.click(); return; } if(e.target.id==='pw') doUnlock(); if(e.target.id==='nome'&&$('#pw1')) doSetup(); } });
+document.addEventListener('input',e=>{ if(e.target.id==='etiq'){ const r=getR(SEL); if(r&&ETI) $('#etires').innerHTML=etiCerca(r,e.target.value); return; } if(e.target.id==='ricq'){ const p=ETI&&ETI.prodotti.find(x=>x.id===ETINR_P); $('#ricres').innerHTML=e.target.value.trim()?etiRicCerca(e.target.value,false):etiRicCerca(p?p.nome:'',true); return; } if(e.target.id==='q'){ Q=e.target.value; render.focusQ=true; clearTimeout(render.qt); render.qt=setTimeout(render,180); } });
+document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('[role=button][tabindex]')){ e.preventDefault(); e.target.click(); return; } if(e.key==='Enter'){ if(e.target.id==='etiq'){ e.preventDefault(); const b=document.querySelector('#etires button'); if(b) b.click(); return; } if(e.target.id==='ricq'){ e.preventDefault(); const b=document.querySelector('#ricres button'); if(b) b.click(); return; } if(e.target.id==='pw') doUnlock(); if(e.target.id==='nome'&&$('#pw1')) doSetup(); } });
 document.addEventListener('dragover',e=>{ const d=$('#drop'); if(d){ e.preventDefault(); d.classList.add('on'); } });
 document.addEventListener('dragleave',e=>{ const d=$('#drop'); if(d&&e.target===d) d.classList.remove('on'); });
 document.addEventListener('drop',e=>{ const d=$('#drop'); if(!d) return; e.preventDefault(); d.classList.remove('on'); if(e.dataTransfer.files.length) readFiles([...e.dataTransfer.files]); });
