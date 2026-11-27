@@ -61,7 +61,7 @@ async function etiAuto(){
     const res=await etiApply(data=>{ const nomi=[]; etiDaAggiornare(data).forEach(({p,txt})=>{ p.ingredienti=txt; etiStamp(p); p.updatedBy='App Cucina (automatico)'; nomi.push(p.nome); }); return nomi; },
       nomi=>'Etichette aggiornate dalla Cucina: '+nomi.join(', '));
     if(!res.ok) setStatus('Etichette: '+res.err,true);
-    else if(res.nomi.length) toast((res.prova?'PROVA, non salvato. Avrei aggiornato le etichette: ':'Etichette aggiornate: ')+res.nomi.join(', '),6000);
+    else if(res.nomi.length) toast((res.prova?'PROVA, non salvato. Avrei aggiornato le etichette: ':'Etichette aggiornate: ')+res.nomi.join(', ')+(res.prova?'':'. Le confezioni già in banco vanno rietichettate.'),9000);
     if(!EDIT) render();
   }catch(e){ console.warn('etiAuto',e); }finally{ etiAutoBusy=false; }
 }
@@ -140,3 +140,111 @@ async function etiSave(r){
   alert('Non salvata: troppi salvataggi contemporanei, riprova.');
 }
 
+
+/* ===== Etichette senza ricetta (dalla 1.5.5) =====
+   Prodotti dell'archivio etichette che nessuna ricetta usa: si collegano a una ricetta, si crea una ricetta nuova
+   partendo dall'etichetta, oppure si segnano "non serve ricetta" (S.etiNoRic, sincronizzato tra i computer).
+   Le etichette nuove (mai viste su questo computer) danno un avviso all'apertura. */
+const ETI_VISTE=PFX+'cuc_eti_viste';
+function etiNoRicSet(){ return new Set((S.etiNoRic||[]).filter(x=>!x.deleted).map(x=>x.id)); }
+function etiSenzaRicetta(tutte){
+  if(!ETI) return []; const L=etiLinks(), no=etiNoRicSet();
+  return ETI.prodotti.filter(p=>!p.deleted&&!L.has(p.id)&&(tutte||!no.has(p.id))).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)||a.nome.localeCompare(b.nome,'it'));
+}
+function etiViste(){ try{ const v=JSON.parse(localStorage.getItem(ETI_VISTE)||'null'); return Array.isArray(v)?new Set(v):null; }catch(e){ return null; } }
+function etiSegnaViste(){ if(ETI) localStorage.setItem(ETI_VISTE,JSON.stringify(ETI.prodotti.map(p=>p.id))); }
+function etiNuove(){ const v=etiViste(); if(!v) return []; return etiSenzaRicetta().filter(p=>!v.has(p.id)); }
+function etiAvvisoNuove(){ // dopo aver letto l'archivio etichette
+  if(!ETI) return; if(!etiViste()){ etiSegnaViste(); return; } // prima volta su questo computer: niente avviso per le etichette che c'erano già
+  const n=etiNuove(); if(n.length) toast((n.length===1?'Nuova etichetta senza ricetta: '+n[0].nome:n.length+' nuove etichette senza ricetta')+' (vedi Quadro)',7000);
+}
+function etiNoRicCard(){
+  if(!ETI) return ''; const tutte=!!etiNoRicCard.tutte, E=etiSenzaRicetta(tutte), no=etiNoRicSet(), nuove=new Set(etiNuove().map(p=>p.id));
+  const da=E.filter(p=>!no.has(p.id)).length, nNo=etiSenzaRicetta(true).length-etiSenzaRicetta().length;
+  if(!E.length&&!nNo) return '';
+  const prezzo=p=>p.tipoPrezzo==='pezzo'&&p.prezzoPezzo?eur(+p.prezzoPezzo)+'/pz':p.prezzoKg?eur(+p.prezzoKg)+'/kg':'';
+  return `<div class="card" id="etinoric"><h2>Etichette senza ricetta${nuove.size?` <span class="chip w">${nuove.size} nuov${nuove.size===1?'a':'e'}</span>`:''}</h2>
+   <p class="small">${da} prodotti dell'app etichette non sono collegati a nessuna ricetta. Per ognuno: <b>Collega</b> a una ricetta che c'è già, <b>Crea ricetta</b> partendo dall'etichetta, oppure <b>Non serve</b> (prodotti rivenduti, confezionati da altri).${nNo?` ${nNo} segnati "non serve": <a href="#" data-act="etinrtutte">${tutte?'nascondili':'mostrali'}</a>.`:''}</p>
+   ${E.length?`<div class="scroll" style="max-height:420px"><table class="t"><tr><th>Etichetta</th><th class="hm">Ingredienti</th><th class="n hm">Prezzo</th><th></th></tr>
+   ${E.map(p=>`<tr><td>${nuove.has(p.id)?'<span class="chip w">nuova</span> ':''}<b>${esc(p.nome)}</b>${p.sottotitolo?`<br><span class="small mut">${esc(p.sottotitolo)}</span>`:''}</td><td class="small hm">${esc((p.ingredienti||'').slice(0,140))}${(p.ingredienti||'').length>140?'…':''}</td><td class="n hm">${esc(prezzo(p))}</td>
+     <td class="n" style="white-space:nowrap">${no.has(p.id)?`<button class="b sm" data-act="etinrsi:${p.id}">Rimetti in elenco</button>`:`<button class="b sm" data-act="etinrlink:${p.id}">Collega</button> <button class="b sm p" data-act="etinrnew:${p.id}">Crea ricetta</button> <button class="b sm" data-act="etinrno:${p.id}">Non serve</button>`}</td></tr>`).join('')}</table></div>`:''}
+   <p class="small mut">Collegare non cambia l'etichetta: per farla aggiornare da sola, apri poi la ricetta → "Rendi automatica".</p></div>`;
+}
+function etiNoRic(pid,si){
+  const x=(S.etiNoRic||(S.etiNoRic=[])).find(y=>y.id===pid);
+  if(x){ x.deleted=!si; touch(x); } else S.etiNoRic.push({id:pid,updatedAt:now(),deleted:!si});
+  commit(); render(); toast(si?'Segnata: non serve ricetta':'Rimessa nell\'elenco');
+}
+let ETINR_P='';
+function etiNoRicLinkDlg(pid){
+  const p=ETI&&ETI.prodotti.find(x=>x.id===pid); if(!p) return; ETINR_P=pid;
+  dialog('Collega "'+p.nome+'" a una ricetta',`<input class="i" id="ricq" type="search" aria-label="Cerca la ricetta" placeholder="Cerca la ricetta…" autocomplete="off" value="">
+   <div class="etipick"><div class="etires" id="ricres">${etiRicCerca(p.nome,true)}</div></div>
+   <p class="small mut">Mostro prima le ricette con il nome più simile all'etichetta. Una ricetta ha una sola etichetta: se ne aveva già un'altra, viene sostituita.</p>`,[['Annulla','dlgclose']]);
+  setTimeout(()=>$('#ricq')?.focus(),50);
+}
+function etiRicCerca(q,simili){
+  const n=norm(q||''), parole=n.split(/\s+/).filter(w=>w.length>(simili?3:0));
+  return ricette().map(r=>{ const t=norm(r.nome); const s=simili?parole.filter(w=>t.includes(w)).length*10-t.length/100:(parole.every(w=>t.includes(w))?(t.startsWith(n)?100:0)-t.length/100:null); return s==null?null:{r,s}; })
+    .filter(Boolean).sort((a,b)=>b.s-a.s||a.r.nome.localeCompare(b.r.nome,'it')).slice(0,60)
+    .map(({r})=>`<button type="button" data-act="etinrpick:${r.id}">${esc(r.nome)}${r.etichetta?`<small>· ha già un'etichetta</small>`:''}</button>`).join('')||'<p class="small mut" style="padding:8px 12px;margin:0">Nessuna ricetta con queste parole.</p>';
+}
+function etiNoRicPick(rid){
+  const r=getR(rid), p=ETI&&ETI.prodotti.find(x=>x.id===ETINR_P); if(!r||!p) return;
+  if(r.etichetta&&r.etichetta!==p.id){ const v=ETI.prodotti.find(x=>x.id===r.etichetta); if(!confirm(`"${r.nome}" è già collegata a "${v?v.nome:'un\'altra etichetta'}". Sostituire con "${p.nome}"?`)) return; }
+  r.etichetta=p.id; touch(r); commit(); closeDlg(); toast('Collegata: '+r.nome+' → '+p.nome,4000); render();
+}
+function etiNoRicNew(pid){
+  const p=ETI&&ETI.prodotti.find(x=>x.id===pid); if(!p) return;
+  if(EDIT&&!confirm('Esci dalla modifica in corso senza salvare?')) return;
+  const r=newRecipe(); r.nome=p.nome.trim(); r.etichetta=p.id;
+  if(ricette().some(x=>x.nome.toLowerCase()===r.nome.toLowerCase())) r.nome+=' (da etichetta)';
+  if(p.tipoPrezzo==='pezzo'&&+p.prezzoPezzo){ r.vendita='pezzo'; r.prezzoBanco=+p.prezzoPezzo; r.unitaBanco='€/pz'; }
+  else if(+p.prezzoKg){ r.vendita='kg'; r.prezzoBanco=+p.prezzoKg; r.unitaBanco='€/kg'; }
+  r.note=('Creata dall\'etichetta "'+p.nome+'". Ingredienti in etichetta: '+(p.ingredienti||'—')).slice(0,2000);
+  EDIT=r; SEL=r.id; TAB='ricette'; render(); if(typeof scrollEdit==='function') scrollEdit();
+  toast('Nuova ricetta da "'+p.nome+'": aggiungi ingredienti e dosi, poi Salva',6000);
+}
+
+/* ===== Modifiche nelle Etichette (dalla 1.5.5) =====
+   Confronta l'archivio etichette di adesso con quello visto l'ultima volta su questo computer (localStorage, solo i campi
+   che contano) ed elenca le differenze: prodotti nuovi o eliminati, prezzo, ingredienti, nome, conservazione, scadenza, tracce.
+   Non elenca le modifiche fatte dalla Cucina (updatedBy "App Cucina…"). "Segna come viste" = la foto di adesso diventa il riferimento. */
+const ETI_FOTO=PFX+'cuc_eti_foto';
+const ETI_CAMPI=[['nome','Nome'],['sottotitolo','Sottotitolo'],['ingredienti','Ingredienti'],['tracce','Tracce'],['tracceExtra','Tracce (altro)'],['conservazione','Conservazione'],['diciture','Diciture'],['tipoData','Tipo di scadenza'],['giorni','Giorni'],['tipoPrezzo','Prezzo al kg/pezzo'],['prezzoKg','Prezzo €/kg'],['prezzoPezzo','Prezzo €/pezzo'],['mostraPrezzo','Prezzo in etichetta'],['stato','Stato (surgelato/decongelato)'],['fonte','Ingredienti dalla Cucina']];
+function etiFotoDi(d){ const o={}; (d&&d.prodotti||[]).forEach(p=>{ const x={u:p.updatedAt||0,d:!!p.deleted}; ETI_CAMPI.forEach(([k])=>{ const v=p[k]; x[k]=Array.isArray(v)?v.join(', '):v==null?'':String(v); }); o[p.id]=x; }); return o; }
+function etiFoto(){ try{ const v=JSON.parse(localStorage.getItem(ETI_FOTO)||'null'); return v&&typeof v==='object'?v:null; }catch(e){ return null; } }
+function etiFotoSalva(){ if(ETI) try{ localStorage.setItem(ETI_FOTO,JSON.stringify(etiFotoDi(ETI))); }catch(e){} }
+function etiModifiche(){
+  if(!ETI) return []; const F=etiFoto(); if(!F) return [];
+  const out=[], val=(k,v)=>k==='fonte'?(v==='cucina'?'sì (automatica)':'no (scritti a mano)'):k==='mostraPrezzo'?(v==='true'?'sì':'no'):v;
+  ETI.prodotti.forEach(p=>{
+    if(/^App Cucina/.test(p.updatedBy||'')) return; const a=F[p.id], chi=p.updatedBy||'', quando=p.updatedAt||0;
+    if(!a){ if(!p.deleted) out.push({p,tipo:'nuovo',chi,quando}); return; }
+    if(p.deleted&&!a.d){ out.push({p,tipo:'eliminato',chi,quando}); return; }
+    if(p.deleted) return;
+    const c=[]; ETI_CAMPI.forEach(([k,l])=>{ const v=Array.isArray(p[k])?p[k].join(', '):p[k]==null?'':String(p[k]); if((a[k]??'')!==v) c.push({l,k,prima:val(k,a[k]??''),dopo:val(k,v)}); });
+    if(c.length) out.push({p,tipo:'cambiato',c,chi,quando});
+  });
+  return out.sort((x,y)=>y.quando-x.quando);
+}
+function etiModAvviso(){ if(!ETI) return; if(!etiFoto()){ etiFotoSalva(); return; } const n=etiModifiche().length; if(n) toast(n+(n===1?' modifica':' modifiche')+' nell\'app Etichette (vedi Quadro)',7000); }
+// solo il pezzo cambiato di un testo lungo, con qualche parola intorno: "…carote, polpa [olio extravergine di oliva] → [olio di girasole], sale…"
+function etiDiff(a,b){
+  a=String(a||'').trim(); b=String(b||'').trim(); if(a.length+b.length<120) return `<span class="prima">${esc(a)||'<i>vuoto</i>'}</span> → <span class="dopo">${esc(b)||'<i>vuoto</i>'}</span>`;
+  const A=a.split(/(\s+)/), B=b.split(/(\s+)/); let i=0; while(i<A.length&&i<B.length&&A[i]===B[i]) i++;
+  let j=0; while(j<A.length-i&&j<B.length-i&&A[A.length-1-j]===B[B.length-1-j]) j++;
+  const ctx=8, pre=A.slice(Math.max(0,i-ctx),i).join(''), post=A.slice(A.length-j,Math.min(A.length,A.length-j+ctx)).join('');
+  const via=A.slice(i,A.length-j).join('').trim(), nuovo=B.slice(i,B.length-j).join('').trim();
+  return `${i>ctx?'…':''}${esc(pre)}<span class="prima">${esc(via)||'<i>niente</i>'}</span> → <span class="dopo">${esc(nuovo)||'<i>tolto</i>'}</span> ${esc(post)}${j>ctx?'…':''}`;
+}
+function etiModCard(){
+  const M=etiModifiche(); if(!M.length) return '';
+  const L=etiLinks(), data=t=>t?new Date(t).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+  const ric=p=>{ const rs=L.get(p.id)||[]; return rs.length?` · ricetta <a href="#" data-ric="${rs[0].id}">${esc(rs[0].nome)}</a>`:''; };
+  return `<div class="card" id="etimod"><h2>Modifiche nelle Etichette <span class="chip w">${M.length}</span></h2>
+   <p class="small mut">Cambiamenti fatti nell'app Etichette dall'ultima volta che hai segnato "viste". Se un ingrediente è stato cambiato per errore, correggilo nell'app Etichette (o nella ricetta, se l'etichetta è automatica).</p>
+   <div class="scroll" style="max-height:460px">${M.map(m=>`<div class="etimod"><div><b>${esc(m.p.nome)}</b> ${m.tipo==='nuovo'?'<span class="chip w">nuova etichetta</span>':m.tipo==='eliminato'?'<span class="chip r">eliminata</span>':''}<span class="small mut"> · ${esc(m.chi||'postazione senza nome')} · ${data(m.quando)}${ric(m.p)}</span></div>
+     ${m.c?m.c.map(c=>`<div class="small${c.k==='ingredienti'||c.k==='tracce'?' imp':''}"><b>${esc(c.l)}</b>: ${etiDiff(c.prima,c.dopo)}</div>`).join(''):''}</div>`).join('')}</div>
+   <p style="margin-top:8px"><button class="b sm p" data-act="etimodviste">Segna tutte come viste</button></p></div>`;
+}

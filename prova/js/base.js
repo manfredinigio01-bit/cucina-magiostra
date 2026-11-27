@@ -11,7 +11,7 @@ if(PROVA){ // ben riconoscibile e non installabile come app
   document.querySelector('link[rel="manifest"]')?.remove();
   document.body.insertAdjacentHTML('afterbegin','<div id="provabar" style="background:#ffd54a;color:#3a2a00;padding:6px 20px;font-weight:600;font-size:13px;text-align:center">VERSIONE DI PROVA — dati separati da quelli veri; GitHub si legge ma non si modifica. Per il lavoro vero usa la versione normale.</div>');
 }
-const APP_VERSION='1.5.4';
+const APP_VERSION='1.5.5';
 const DEF_REPO='manfredinigio01-bit/magiostra-cucina-dati';
 const ETI_REPO='manfredinigio01-bit/etichette-magiostra-dati';
 const DATA_FILE='ricettario.json';
