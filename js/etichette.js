@@ -202,8 +202,11 @@ function etiNoRicNew(pid){
   if(p.tipoPrezzo==='pezzo'&&+p.prezzoPezzo){ r.vendita='pezzo'; r.prezzoBanco=+p.prezzoPezzo; r.unitaBanco='€/pz'; }
   else if(+p.prezzoKg){ r.vendita='kg'; r.prezzoBanco=+p.prezzoKg; r.unitaBanco='€/kg'; }
   r.note=('Creata dall\'etichetta "'+p.nome+'". Ingredienti in etichetta: '+(p.ingredienti||'—')).slice(0,2000);
+  // dalla 1.5.6: righe già compilate con gli ingredienti riconosciuti nel testo dell'etichetta (dosi vuote)
+  const rg=etiRigheDaTesto(p.ingredienti||''); if(rg.length) r.righe=rg;
+  const nr=rg.filter(x=>!x.ing&&!x.ric).length;
   EDIT=r; SEL=r.id; TAB='ricette'; render(); if(typeof scrollEdit==='function') scrollEdit();
-  toast('Nuova ricetta da "'+p.nome+'": aggiungi ingredienti e dosi, poi Salva',6000);
+  toast(rg.length?'Nuova ricetta da "'+p.nome+'": '+rg.length+' ingredienti presi dall\'etichetta'+(nr?' ('+nr+' non in elenco, in rosso)':'')+'. Controllali, metti dosi e tempi, poi Salva':'Nuova ricetta da "'+p.nome+'": aggiungi ingredienti e dosi, poi Salva',9000);
 }
 
 /* ===== Modifiche nelle Etichette (dalla 1.5.5) =====
@@ -247,4 +250,67 @@ function etiModCard(){
    <div class="scroll" style="max-height:460px">${M.map(m=>`<div class="etimod"><div><b>${esc(m.p.nome)}</b> ${m.tipo==='nuovo'?'<span class="chip w">nuova etichetta</span>':m.tipo==='eliminato'?'<span class="chip r">eliminata</span>':''}<span class="small mut"> · ${esc(m.chi||'postazione senza nome')} · ${data(m.quando)}${ric(m.p)}</span></div>
      ${m.c?m.c.map(c=>`<div class="small${c.k==='ingredienti'||c.k==='tracce'?' imp':''}"><b>${esc(c.l)}</b>: ${etiDiff(c.prima,c.dopo)}</div>`).join(''):''}</div>`).join('')}</div>
    <p style="margin-top:8px"><button class="b sm p" data-act="etimodviste">Segna tutte come viste</button></p></div>`;
+}
+
+/* ===== Crea ricetta: ingredienti presi dal testo dell'etichetta (dalla 1.5.6) =====
+   Il testo ingredienti si divide alle virgole di primo livello (le parentesi restano col loro ingrediente),
+   si tolgono asterischi, percentuali e parentesi, e ogni voce si abbina a un ingrediente dell'elenco
+   (nome o "nome in etichetta") o a una ricetta base. Quello che non si riconosce resta scritto com'è:
+   il modulo lo segna in rosso ("Non è nell'elenco ingredienti"). Le dosi restano vuote. */
+// nomi scritti in modo diverso tra etichetta e ricettario: si riducono alla stessa forma prima di confrontarli
+const ETI_SINONIMI=[[/\bolio (di )?semi (di )?/g,'olio di '],[/\b(albicocche|prugne|fichi) secche\b/g,'$1 disidratate'],[/\bextra ?vergine\b|\bextravergine\b/g,'evo'],[/\bbevanda (a base )?di\b/g,'latte di'],[/\buva sultanina\b|\buvetta\b/g,'uva passa'],[/\bpangrattato\b/g,'pan grattato'],
+  [/\blievito (in scaglie|alimentare in scaglie)\b/g,'lievito alimentare'],[/\btahin[ai]?\b|\btahini\b/g,'thaina'],[/\bcoste\b|\bbieta\b/g,'biete'],[/\bsucco (di )?limone\b/g,'limoni'],
+  [/\bfarina di (grano tenero|frumento) tipo\b/g,'farina'],[/\bfarina di grano tenero\b/g,'farina'],[/\bamido di mais\b/g,'maizena'],[/\bcocco (in scaglie|rapato|grattugiato)\b/g,'cocco rape'],
+  [/\bsciroppo d agave\b/g,'sciroppo di agave'],[/\bpolpa e succo di pomodoro\b/g,'polpa di pomodoro']];
+const ETI_VUOTE=new Set(['di','d','del','della','dello','dei','degli','delle','e','ed','a','al','alla','in','con','tipo','da','il','la','le','lo','i','gli']);
+function etiForma(t){ let n=norm(t); ETI_SINONIMI.forEach(([re,v])=>n=n.replace(re,v)); return n.split(' ').filter(w=>w&&!ETI_VUOTE.has(w)).map(w=>w.length>3&&/[aeio]$/.test(w)?w.slice(0,-1):w); }
+function etiVoci(txt){
+  const out=[]; let liv=0, cur='', frase=0; const pezzi=[];
+  txt=String(txt||'').replace(/\b(zucch|bev|giras|bicarb|conc|natur|integr|int|melanz|margar|veg|germ|vegan|biol|ext|verg)\.\s*/gi,(m,a)=>({zucch:'zucchero',bev:'bevanda',giras:'girasole',bicarb:'bicarbonato',conc:'concentrato',natur:'naturale',integr:'integrale',int:'integrale',margar:'margarina',veg:'vegetale',germ:'germogliato',melanz:'melanzane',vegan:'vegano',biol:'biologico',ext:'extra',verg:'vergine'})[a.toLowerCase()]+' ').replace(/\s+e\/o\s+/gi,', '); // abbreviazioni con il punto; "melanzane e/o zucchine" = due voci
+  for(const ch of txt){ if(ch==='('||ch==='[') liv++; if(ch===')'||ch===']') liv=Math.max(0,liv-1);
+    if(liv===0&&(ch===','||ch===';'||ch==='.'&&!/\d$/.test(cur))){ pezzi.push([cur,frase]); cur=''; if(ch==='.') frase++; } else cur+=ch; }
+  pezzi.push([cur,frase]);
+  let g=0, fPrec=0;
+  pezzi.forEach(([v,f])=>{ let t=v.replace(/\*/g,'').trim(), titolo='';
+    const dp=t.indexOf(':'), pp=t.indexOf('('); if(dp>0&&(pp<0||dp<pp)){ titolo=t.slice(0,dp).trim(); t=t.slice(dp+1).trim(); } // "Besciamella: bevanda di soia" = componente "Besciamella"
+    if(f!==fPrec||titolo){ g++; fPrec=f; } // un gruppo nuovo a ogni frase e a ogni titolo (anche dopo una virgola: "…, ripieno: miglio")
+    const nome=t.replace(/\s*[\(\[].*$/,'').replace(/\s*\d+([.,]\d+)?\s*%/g,'').replace(/\s+/g,' ').trim();
+    if(nome&&nome.length>1&&!/^(puo|può) contenere|^tracce|^ingrediente surgelato|^prodotto/i.test(nome)) out.push({testo:t,nome,titolo,frase:g}); });
+  return out;
+}
+// parole che trasformano l'ingrediente: se ce l'ha uno solo dei due nomi, non sono la stessa cosa
+const ETI_TRASF=/^(malt|acet|sciropp|succ|oli|confit|bevand|brod|estratt|gocc|marmellat|compost|fiocc|soffiat|secch|disidratat|essiccat|affumicat|fermentat|concentrat|granulat|crem|pann|burr|panko)$/;
+let ETI_USO=null; // quante ricette usano ogni ingrediente: a parità di somiglianza vince il più usato
+function etiAbbinaVoce(v,soloRic){
+  const W=etiForma(v.nome); if(!W.length) return null; const Ws=new Set(W);
+  if(!ETI_USO){ ETI_USO=new Map(); ricette().forEach(r=>r.righe.forEach(x=>{ const k=x.ing||x.ric; if(k) ETI_USO.set(k,(ETI_USO.get(k)||0)+1); })); }
+  let best=null, bs=0, bu=-1;
+  const prova=(nome,ris,id)=>{ const M=etiForma(String(nome).replace(/\s*\([^)]*\)/g,'')); if(!M.length) return; const com=M.filter(w=>Ws.has(w)).length; let s=com/Math.max(W.length,M.length);
+    if(com!==M.length||com!==W.length){ if(M.some(w=>!Ws.has(w)&&ETI_TRASF.test(w))||W.some(w=>!M.includes(w)&&ETI_TRASF.test(w))) return; } // "orzo" ≠ "malto di orzo", "aceto di mele" ≠ "mele"
+    if(com===M.length&&com===W.length) s=1; else if(com===M.length&&M.length>=2) s=Math.max(s,.8); else if(com===M.length) s=Math.max(s,.7); else if(com===W.length&&W.length>=2) s=Math.max(s,.75); else if(com===W.length) s=Math.max(s,.7); // "cipolla" → "Cipolla rossa/bianca"
+    const u=ETI_USO.get(id)||0; if(s>bs+.001||Math.abs(s-bs)<=.001&&u>bu){ bs=s; best=ris; bu=u; } };
+  if(soloRic!==true) ings().forEach(i=>{ prova(i.nome,{ing:i},i.id); if(/\(/.test(i.nome)) prova(i.nome.replace(/[()\/]/g,' '),{ing:i},i.id); if(i.nomeEtichetta) prova(i.nomeEtichetta,{ing:i},i.id); });
+  // una ricetta base come riga solo se il nome corrisponde bene (o se è il titolo di un gruppo, es. "Besciamella: …")
+  const bs0=bs, best0=best, bu0=bu; ricette().forEach(r=>prova(r.nome.replace(/\s*\([^)]*\)/g,''),{ric:r},r.id));
+  if(best&&best.ric&&bs<.8&&!soloRic){ bs=bs0; best=best0; bu=bu0; }
+  return bs>=.7?best:null;
+}
+// titolo di un gruppo ("Frolla: …") → solo una ricetta BASE (categoria "Basi…" o già usata come base altrove), mai un piatto
+const ETI_GENERICI=/^(ripien|impast|crem|bas|sals|condiment|copertur|guarnizion|farci|farcitur|topping|glass|fond|sugh|composta|gel|cop)$/; // titoli troppo generici: solo nome identico
+function etiBaseTitolo(titolo){
+  const W=etiForma(titolo); if(!W.length) return null; const Ws=new Set(W); let best=null, bs=0;
+  ricette().filter(r=>/bas/i.test(r.categoria||'')||usedAsBase(r.id).length).forEach(r=>{ const M=etiForma(r.nome.replace(/\s*\([^)]*\)/g,'')); if(!M.length) return;
+    const com=M.filter(w=>Ws.has(w)).length; const s=com===M.length&&com===W.length?1:(com===W.length||com===M.length)&&!(W.length===1&&ETI_GENERICI.test(W[0]))?.7:0; if(s>bs){ bs=s; best={ric:r}; } });
+  return bs>=.7?best:null;
+}
+function etiRigheDaTesto(txt){
+  ETI_USO=null; const visti=new Set(), righe=[], basiFrasi=new Map();
+  const add=(a,nome)=>{ const k=a?(a.ing?'i'+a.ing.id:'r'+a.ric.id):'t'+norm(nome); if(visti.has(k)) return; visti.add(k);
+    righe.push(a&&a.ing?{ing:a.ing.id,ric:null,nome:a.ing.nome,dose:null,doseTesto:'',flag:''}:a&&a.ric?{ing:null,ric:a.ric.id,nome:a.ric.nome,dose:null,doseTesto:'',flag:''}:{ing:null,ric:null,nome:nome.charAt(0).toUpperCase()+nome.slice(1),dose:null,doseTesto:'',flag:''}); };
+  etiVoci(txt).forEach(v=>{
+    // "Besciamella: …" o "Pasta (semola…)": se c'è una ricetta base con quel nome si usa la base, e i suoi ingredienti non si ripetono
+    if(v.titolo){ if(!basiFrasi.has(v.frase)){ const b=etiBaseTitolo(v.titolo); basiFrasi.set(v.frase,b); if(b) add(b); } }
+    if(basiFrasi.get(v.frase)) return;
+    add(etiAbbinaVoce(v),v.nome); });
+  return righe;
 }
